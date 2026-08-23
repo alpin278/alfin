@@ -1,0 +1,36 @@
+﻿# Version Control
+.git
+.gitignore
+.github
+
+# Environment Local
+.env
+.env.*
+!.env.example
+
+# Local Dependencies (will be built inside container)
+vendor
+node_modules
+
+# Storage & Temporary Files
+storage/app/public/*
+!storage/app/public/.gitignore
+storage/framework/cache/data/*
+!storage/framework/cache/data/.gitignore
+storage/framework/sessions/*
+!storage/framework/sessions/.gitignore
+storage/framework/views/*
+!storage/framework/views/.gitignore
+storage/logs/*
+!storage/logs/.gitignore
+
+# Tests & IDE Files
+tests
+phpunit.xml
+.phpunit.result.cache
+.editorconfig
+.idea
+.vscode
+*.log
+npm-debug.log
+yarn-error.log

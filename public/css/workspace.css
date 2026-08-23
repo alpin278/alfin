@@ -1,0 +1,255 @@
+/* ==========================================================================
+   DTE VirtualLab V2 — Workspace, Technical Grid & Proteus Orthogonal Cables
+   ========================================================================== */
+
+.workspace-wrapper {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  background-color: #f8fafc !important;
+  background-image: radial-gradient(circle, #cbd5e1 1.5px, transparent 1.5px) !important;
+  background-size: 20px 20px;
+  cursor: default;
+  user-select: none;
+  z-index: 1;
+}
+
+.workspace-canvas {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Transform Container */
+.canvas-transform-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+  pointer-events: none;
+}
+
+/* SVG Cables Layer */
+.cables-svg-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 10000px;
+  height: 10000px;
+  pointer-events: none;
+  z-index: var(--z-workspace-cables);
+  overflow: visible;
+}
+
+/* Component DOM Layer */
+.components-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 10000px;
+  height: 10000px;
+  pointer-events: none;
+  z-index: var(--z-workspace-components);
+}
+
+/* --------------------------------------------------------------------------
+   Proteus-Style Orthogonal 90° Cables (Flush CAD T-Junctions)
+   -------------------------------------------------------------------------- */
+.circuit-wire.orthogonal {
+  fill: none;
+  stroke: var(--color-wire-orange, #f59e0b);
+  stroke-width: 4px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  cursor: pointer;
+  pointer-events: stroke;
+  transition: stroke 0.15s ease, stroke-width 0.15s ease;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.25));
+}
+
+.circuit-wire.orthogonal:hover {
+  stroke: #fbbf24;
+  stroke-width: 6px;
+}
+
+.circuit-wire.orthogonal.selected {
+  stroke: var(--color-primary-light, #38bdf8);
+  stroke-width: 5px;
+  filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.8));
+}
+
+/* Active Current Flow */
+.circuit-wire.orthogonal.active {
+  stroke: var(--color-wire-orange);
+  stroke-dasharray: 8 4;
+  animation: wire-flow-anim 0.8s linear infinite;
+  filter: drop-shadow(0 0 4px rgba(248, 140, 0, 0.6));
+}
+
+.circuit-wire.orthogonal.short-circuit {
+  stroke: var(--color-error-red);
+  stroke-dasharray: 6 3;
+  animation: wire-flow-anim 0.3s linear infinite;
+  filter: drop-shadow(0 0 8px rgba(229, 57, 53, 0.8));
+}
+
+.circuit-wire-preview {
+  fill: none;
+  stroke: var(--color-primary-blue);
+  stroke-width: 3px;
+  stroke-linecap: butt;
+  stroke-linejoin: miter;
+  stroke-dasharray: 6 4;
+  pointer-events: none;
+  opacity: 0.9;
+}
+
+/* Proteus Standard Junction Dot (Solid Merged CAD Node) */
+.junction-dot {
+  fill: #1e293b;
+  stroke: var(--color-wire-orange);
+  stroke-width: 2px;
+  pointer-events: none;
+  z-index: 22;
+}
+
+@keyframes wire-flow-anim {
+  from {
+    stroke-dashoffset: 24;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Orthogonal Route Handles & Floating Toolbar */
+.wire-handle.orthogonal-handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background-color: var(--color-primary-blue);
+  border: 2px solid #ffffff;
+  border-radius: 2px;
+  transform: translate(-50%, -50%);
+  cursor: move;
+  pointer-events: auto;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+  z-index: 30;
+}
+
+.wire-floating-toolbar {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  background-color: rgba(15, 23, 42, 0.92);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  z-index: 35;
+  pointer-events: auto;
+  animation: fadeIn 0.15s ease;
+}
+
+.btn-cut-wire {
+  background: transparent;
+  border: none;
+  color: #ef4444;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+}
+
+.btn-cut-wire:hover {
+  color: #ffffff;
+}
+
+/* --------------------------------------------------------------------------
+   Terminal Pins
+   -------------------------------------------------------------------------- */
+.terminal-node {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+  background-color: #ffffff;
+  border: 2.5px solid #1e293b;
+  position: absolute;
+  transform: translate(-50%, -50%);
+  cursor: crosshair;
+  pointer-events: auto;
+  transition: transform 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+  z-index: 25;
+  touch-action: none;
+}
+
+/* Expanded Touch Hitbox (Invisible 42px Touch Target for Mobile & Touchscreens) */
+.terminal-node::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-full);
+  background: transparent;
+  pointer-events: auto;
+}
+
+.terminal-node:hover {
+  transform: translate(-50%, -50%) scale(1.4);
+  border-color: var(--color-primary-blue);
+  background-color: #60a5fa;
+}
+
+.terminal-node.connecting-source {
+  border-color: var(--color-primary-yellow);
+  background-color: #fde047;
+  transform: translate(-50%, -50%) scale(1.5);
+  box-shadow: 0 0 10px rgba(244, 180, 0, 0.9);
+}
+
+.terminal-node.snap-hover {
+  border-color: #00c853 !important;
+  background-color: #69f0ae !important;
+  transform: translate(-50%, -50%) scale(1.6) !important;
+  box-shadow: 0 0 14px rgba(0, 200, 83, 0.95), 0 0 24px rgba(105, 240, 174, 0.6) !important;
+}
+
+.terminal-node.connected {
+  background-color: #1e293b;
+  border-color: var(--color-wire-orange);
+}
+
+/* --------------------------------------------------------------------------
+   Smart Numbering Badge (Green Circles with White Bold Numbers)
+   -------------------------------------------------------------------------- */
+.smart-number-badge {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  background-color: var(--color-node-green);
+  color: #ffffff;
+  border: 2px solid #ffffff;
+  border-radius: var(--radius-full);
+  width: 22px;
+  height: 22px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--font-sans);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.25);
+  z-index: 25;
+}

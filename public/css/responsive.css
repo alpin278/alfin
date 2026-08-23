@@ -1,0 +1,430 @@
+/* ==========================================================================
+   DTE VirtualLab V2 — Responsive Layout Architecture
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Tablet Breakpoint (768px – 1150px)
+   -------------------------------------------------------------------------- */
+@media (max-width: 1150px) and (min-width: 768px) {
+  .zoom-stepper,
+  #btn-screenshot,
+  #btn-help {
+    display: none !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   2. Mobile Screen Breakpoint (< 768px)
+   -------------------------------------------------------------------------- */
+@media (max-width: 767px) {
+  /* Adjust Clean Mobile Header */
+  .app-header {
+    height: 52px;
+    padding: 0 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .header-left-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .brand-logo {
+    font-size: 0.88rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+
+  .brand-logo .brand-title {
+    font-size: 0.88rem;
+    white-space: nowrap;
+  }
+
+  .brand-logo .brand-title span {
+    display: none;
+  }
+
+  .header-center-group {
+    display: none !important;
+  }
+
+  .header-right-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .header-right-group .btn-tool-icon {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border-radius: var(--radius-sm);
+  }
+
+  /* Hide secondary desktop-only controls from mobile top header */
+  .zoom-stepper,
+  #btn-screenshot,
+  #btn-help,
+  #btn-create-report,
+  .header-right-group .highlight-study {
+    display: none !important;
+  }
+
+  /* Centered Horizontal Simulation Metrics Banner on Mobile */
+  .simulation-metrics-banner.side-metrics {
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: calc(100% - 16px);
+    max-width: 380px;
+    padding: 5px 10px;
+    gap: 6px;
+    justify-content: space-between;
+    border-radius: var(--radius-md);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+    z-index: 100;
+  }
+
+  .metric-item {
+    gap: 3px;
+  }
+
+  .metric-label {
+    font-size: 0.65rem;
+  }
+
+  .metric-val {
+    font-size: 0.72rem;
+  }
+
+  .metric-divider {
+    height: 12px;
+  }
+
+  .metric-status-badge {
+    font-size: 0.65rem;
+    padding: 1px 6px;
+  }
+
+  /* Main Workspace Area */
+  .app-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    height: calc(100% - 52px - var(--mobile-bottom-nav-height, 60px));
+    width: 100%;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .workspace-wrapper {
+    flex: 1;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    display: block !important;
+    position: relative;
+    background-color: #f8fafc !important;
+    background-image: radial-gradient(circle, #cbd5e1 1.5px, transparent 1.5px) !important;
+    background-size: 20px 20px !important;
+  }
+
+  .workspace-canvas {
+    width: 100% !important;
+    height: 100% !important;
+    position: absolute !important;
+    inset: 0 !important;
+  }
+
+  /* Hide Desktop Sidebars on Mobile Screens */
+  .sidebar-palette,
+  .sidebar-inspector {
+    display: none !important;
+  }
+
+  /* Hide Floating Bottom Toolbar on Mobile (Functions are in header and bottom nav) */
+  .workspace-bottom-toolbar {
+    display: none !important;
+  }
+
+  /* Bottom Navigation Bar for Mobile */
+  .mobile-bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: var(--mobile-bottom-nav-height);
+    background-color: var(--color-bg-surface);
+    border-top: 1px solid var(--color-border);
+    z-index: var(--z-header);
+    align-items: center;
+    justify-content: space-around;
+    padding: 0 var(--space-2);
+  }
+
+  .nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    color: var(--color-text-secondary);
+    font-size: 0.68rem;
+    font-weight: 500;
+    padding: 6px 12px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    border-radius: var(--radius-md);
+    transition: color var(--transition-fast);
+  }
+
+  .nav-item.active {
+    color: var(--color-primary-light, #38bdf8);
+  }
+
+  /* Glowing Green Active Simulation in Bottom Nav */
+  .nav-item#nav-btn-sim.sim-running {
+    color: #10b981 !important;
+  }
+
+  .nav-item#nav-btn-sim.sim-running .nav-item-icon {
+    color: #10b981 !important;
+    filter: drop-shadow(0 0 10px rgba(16, 185, 129, 0.95));
+    animation: sim-pulse 1.2s infinite ease-in-out;
+  }
+
+  .nav-item#nav-btn-sim.sim-running span {
+    color: #10b981 !important;
+    font-weight: 700 !important;
+    text-shadow: 0 0 10px rgba(16, 185, 129, 0.7);
+  }
+
+  @keyframes sim-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.22); }
+  }
+
+  .nav-item-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.15rem;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   3. Desktop and Large Screens (>= 768px)
+   -------------------------------------------------------------------------- */
+@media (min-width: 768px) {
+  .mobile-bottom-nav {
+    display: none !important;
+  }
+
+  .sidebar-palette {
+    display: flex !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   4. Mobile Landscape Breakpoint (Short height <= 520px)
+   -------------------------------------------------------------------------- */
+@media (max-height: 520px) and (orientation: landscape) {
+  :root {
+    --header-height: 40px;
+    --sidebar-collapsed-width: 48px;
+  }
+
+  .app-header {
+    height: 40px;
+    padding: 0 var(--space-3);
+  }
+
+  .brand-logo {
+    font-size: 0.9rem;
+  }
+
+  .sidebar-palette {
+    width: 48px !important;
+  }
+
+  .palette-content {
+    padding: var(--space-1);
+    gap: var(--space-2);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   5. Mobile Bottom Sheet & Component Scroller
+   -------------------------------------------------------------------------- */
+.mobile-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(3, 7, 18, 0.65);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 1999;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.mobile-bottom-sheet {
+  position: fixed;
+  bottom: var(--mobile-bottom-nav-height, 56px);
+  left: 0;
+  right: 0;
+  height: 65vh;
+  max-height: 75vh;
+  min-height: 320px;
+  background: #0b132b;
+  border-top: 2px solid var(--color-primary-light, #38bdf8);
+  border-radius: 20px 20px 0 0;
+  padding: 14px 16px 20px;
+  z-index: 2000;
+  box-shadow: 0 -12px 36px rgba(0, 0, 0, 0.8);
+  display: flex;
+  flex-direction: column;
+  color: #f8fafc;
+  animation: slideUpSheet 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes slideUpSheet {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.mobile-sheet-handle {
+  width: 42px;
+  height: 4px;
+  background: #475569;
+  border-radius: 4px;
+  margin: -4px auto 12px;
+  flex-shrink: 0;
+}
+
+.mobile-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+
+.mobile-sheet-search {
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.mobile-sheet-search input {
+  width: 100%;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: #f8fafc;
+  font-size: 0.85rem;
+  outline: none;
+}
+
+.mobile-sheet-search input:focus {
+  border-color: #38bdf8;
+}
+
+.mobile-sheet-scroll {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  overflow-y: scroll !important;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y !important;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+  padding-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mobile-sheet-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+
+.mobile-sheet-scroll::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+
+.mobile-category-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #94a3b8;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.mobile-comp-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.mobile-comp-card {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  padding: 10px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  color: #f8fafc;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-height: 72px;
+  touch-action: manipulation;
+}
+
+.mobile-comp-card:active {
+  background: #0284c7;
+  border-color: #38bdf8;
+  transform: scale(0.96);
+}
+
+.mobile-comp-card-icon {
+  color: #38bdf8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mobile-comp-card-name {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.mobile-comp-card-sub {
+  font-size: 0.62rem;
+  color: #94a3b8;
+  text-align: center;
+}
+
