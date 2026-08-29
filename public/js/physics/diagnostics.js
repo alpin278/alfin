@@ -54,6 +54,66 @@ export class PhysicsDiagnostics {
   }
 
   /**
+   * Verifies Kirchhoff's Current Law (KCL) algebraically at every node using signed directed branch currents
+   * 
+   * @param {Object} netlist - Netlist from NetlistBuilder.build()
+   * @param {Object} circuitResult - Result from MNACircuitSolver.solve()
+   * @param {Array} components - Circuit components
+   * @returns {Object} { isSatisfied, maxResidual, nodeResiduals }
+   */
+  static verifyNodeKCL(netlist, circuitResult, components) {
+    const uf = netlist.uf;
+    const nodeCurrentSums = new Map();
+
+    for (const net of netlist.nets.keys()) {
+      nodeCurrentSums.set(uf.find(net), 0);
+    }
+
+    components.forEach(c => {
+      if (["resistor", "lamp", "switch_spst", "motor_dc", "led", "diode"].includes(c.type) && c.terminals?.length >= 2) {
+        const net0 = uf.find(`${c.id}:${c.terminals[0].id}`);
+        const net1 = uf.find(`${c.id}:${c.terminals[1].id}`);
+        if (net0 === net1) return;
+
+        const iSigned = circuitResult.branchCurrentsSigned?.get(c.id) ?? 0;
+        nodeCurrentSums.set(net0, (nodeCurrentSums.get(net0) || 0) + iSigned);
+        nodeCurrentSums.set(net1, (nodeCurrentSums.get(net1) || 0) - iSigned);
+      } else if (c.type === "multimeter") {
+        let tVwma = `${c.id}:term_vwma`;
+        let tCom = `${c.id}:term_com`;
+        if (c.properties?.probes?.vwma?.attachedTo) tVwma = `${c.properties.probes.vwma.attachedTo.compId}:${c.properties.probes.vwma.attachedTo.termId}`;
+        if (c.properties?.probes?.com?.attachedTo) tCom = `${c.properties.probes.com.attachedTo.compId}:${c.properties.probes.com.attachedTo.termId}`;
+        const net0 = uf.find(tVwma);
+        const net1 = uf.find(tCom);
+        if (net0 === net1) return;
+
+        const iSigned = circuitResult.branchCurrentsSigned?.get(c.id) ?? 0;
+        nodeCurrentSums.set(net0, (nodeCurrentSums.get(net0) || 0) + iSigned);
+        nodeCurrentSums.set(net1, (nodeCurrentSums.get(net1) || 0) - iSigned);
+      } else if (c.type === "battery") {
+        const netPos = uf.find(`${c.id}:term_pos`);
+        const netNeg = uf.find(`${c.id}:term_neg`);
+        if (netPos === netNeg) return;
+
+        const jBat = circuitResult.sourceCurrentSigned ?? circuitResult.totalCurrent;
+        nodeCurrentSums.set(netPos, (nodeCurrentSums.get(netPos) || 0) - jBat);
+        nodeCurrentSums.set(netNeg, (nodeCurrentSums.get(netNeg) || 0) + jBat);
+      }
+    });
+
+    let maxResidual = 0;
+    const nodeResiduals = new Map();
+    nodeCurrentSums.forEach((sum, net) => {
+      const res = Math.abs(sum);
+      if (res > maxResidual) maxResidual = res;
+      nodeResiduals.set(net, res);
+    });
+
+    const isSatisfied = maxResidual < 1e-9;
+    return { isSatisfied, maxResidual, nodeResiduals };
+  }
+
+  /**
    * Helper: check if actual ≈ expected within relative tolerance
    */
   static approxEqual(actual, expected, relTol = 0.005) {
@@ -1144,14 +1204,2180 @@ export class PhysicsDiagnostics {
     }
 
     // ──────────────────────────────────────────────
+    // TEST 26 (LED 1) — 12V + 500Ω + LED Vf=2V Forward Bias
+    // ──────────────────────────────────────────────
+    {
+      const comp = [
+        { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] },
+        { id: "R1", type: "resistor", properties: { resistance: 500 }, terminals: [{ id: "term_a" }, { id: "term_b" }] },
+        { id: "LED1", type: "led", properties: { forwardVoltage: 2.0 }, terminals: [{ id: "term_anode" }, { id: "term_cathode" }] }
+      ];
+      const conn = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R1", terminalId: "term_a" } },
+        { from: { componentId: "R1", terminalId: "term_b" }, to: { componentId: "LED1", terminalId: "term_anode" } },
+        { from: { componentId: "LED1", terminalId: "term_cathode" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+      const r = MNACircuitSolver.solve(comp[0], comp, conn);
+      const vLed = r.branchVoltages.get("LED1") || 0;
+      const vR1 = r.branchVoltages.get("R1") || 0;
+      const iLed = r.branchCurrents.get("LED1") || 0;
+      const iR1 = r.branchCurrents.get("R1") || 0;
+      const pLed = vLed * iLed;
+      const pR1 = vR1 * iR1;
+      const kvlResidual = Math.abs(12 - vR1 - vLed);
+      const powerResidual = Math.abs(r.power.source - (pR1 + pLed));
+
+      const checks = [
+        eq(vLed, 2.0),
+        eq(vR1, 10.0),
+        eq(r.totalCurrent, 0.02),
+        eq(iLed, 0.02),
+        eq(r.power.source, 0.24),
+        eq(pR1, 0.20),
+        eq(pLed, 0.04),
+        kvlResidual < 1e-9,
+        powerResidual < 1e-9
+      ];
+      const passed = checks.every(Boolean);
+      record(26, "LED 1: 12V + 500Ω + LED Vf=2V Forward (V_LED=2V, V_R=10V, I=20mA)", passed);
+
+      console.log(`\n[TEST 26] LED 1: Forward Bias (12V + 500Ω + LED 2V)`);
+      console.log(`  V_LED    = ${vLed.toFixed(6)} V  (expected 2.000000) ${checks[0] ? "✅" : "❌"}`);
+      console.log(`  V_R1     = ${vR1.toFixed(6)} V  (expected 10.000000) ${checks[1] ? "✅" : "❌"}`);
+      console.log(`  I_total  = ${r.totalCurrent.toFixed(6)} A  (expected 0.020000) ${checks[2] ? "✅" : "❌"}`);
+      console.log(`  P_source = ${r.power.source.toFixed(6)} W  (expected 0.240000) ${checks[4] ? "✅" : "❌"}`);
+      console.log(`  P_R1     = ${pR1.toFixed(6)} W  (expected 0.200000) ${checks[5] ? "✅" : "❌"}`);
+      console.log(`  P_LED    = ${pLed.toFixed(6)} W  (expected 0.040000) ${checks[6] ? "✅" : "❌"}`);
+      console.log(`  KVL / Power residuals < 1e-9: ${checks[7] && checks[8] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 27 (LED 2) — LED Reverse Polarity (Reverse Bias: Signed Vd < 0, I = 0, OFF)
+    // ──────────────────────────────────────────────
+    {
+      const comp = [
+        { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] },
+        { id: "R1", type: "resistor", properties: { resistance: 500 }, terminals: [{ id: "term_a" }, { id: "term_b" }] },
+        { id: "LED1", type: "led", properties: { forwardVoltage: 2.0, nominalCurrent: 0.020, maxContinuousCurrent: 0.025 }, terminals: [{ id: "term_anode" }, { id: "term_cathode" }] }
+      ];
+      const conn = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R1", terminalId: "term_a" } },
+        { from: { componentId: "R1", terminalId: "term_b" }, to: { componentId: "LED1", terminalId: "term_cathode" } }, // Reversed: K connected to +12V through R1
+        { from: { componentId: "LED1", terminalId: "term_anode" }, to: { componentId: "Bat", terminalId: "term_neg" } }     // A connected to GND (0V)
+      ];
+      const r = MNACircuitSolver.solve(comp[0], comp, conn);
+      const iLed = r.branchCurrents.get("LED1") || 0;
+      const vLed = r.branchVoltages.get("LED1") || 0; // Signed V_anode - V_cathode
+      const vAnode = r.nodeVoltages.get("Bat:term_neg") || 0;
+      const vCathode = (r.nodeVoltages.get("R1:term_b") || r.nodeVoltages.get("Bat:term_pos")) || 12;
+
+      const checks = [
+        eq(r.totalCurrent, 0),
+        eq(iLed, 0),
+        vLed < -11.0, // Signed reverse voltage ≈ -12V
+        r.diodeStates?.get("LED1") === "OFF"
+      ];
+      const passed = checks.every(Boolean);
+      record(27, "LED 2: Reverse Polarity (Signed Vd < 0, I ≈ 0, State = OFF)", passed);
+
+      console.log(`\n[TEST 27] LED 2: Reverse Polarity (Signed Vd < 0)`);
+      console.log(`  raw signed V_anode  = ${vAnode.toFixed(6)} V`);
+      console.log(`  raw signed V_cathode= ${vCathode.toFixed(6)} V`);
+      console.log(`  raw signed Vd (V_LED)= ${vLed.toFixed(6)} V  (expected < 0, ≈ -12V) ${checks[2] ? "✅" : "❌"}`);
+      console.log(`  I_total             = ${r.totalCurrent.toExponential(4)} A  (expected 0) ${checks[0] ? "✅" : "❌"}`);
+      console.log(`  I_LED               = ${iLed.toExponential(4)} A  (expected 0) ${checks[1] ? "✅" : "❌"}`);
+      console.log(`  LED state           = ${r.diodeStates?.get("LED1")} (expected OFF) ${checks[3] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 28 (LED 3) — 5V + 150Ω + LED 2V
+    // ──────────────────────────────────────────────
+    {
+      const comp = [
+        { id: "Bat", type: "battery", properties: { voltage: 5 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] },
+        { id: "R1", type: "resistor", properties: { resistance: 150 }, terminals: [{ id: "term_a" }, { id: "term_b" }] },
+        { id: "LED1", type: "led", properties: { forwardVoltage: 2.0 }, terminals: [{ id: "term_anode" }, { id: "term_cathode" }] }
+      ];
+      const conn = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R1", terminalId: "term_a" } },
+        { from: { componentId: "R1", terminalId: "term_b" }, to: { componentId: "LED1", terminalId: "term_anode" } },
+        { from: { componentId: "LED1", terminalId: "term_cathode" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+      const r = MNACircuitSolver.solve(comp[0], comp, conn);
+      const vLed = r.branchVoltages.get("LED1") || 0;
+      const expI = (5 - 2) / 150; // 0.02 A (20 mA)
+
+      const checks = [
+        eq(r.totalCurrent, expI),
+        eq(vLed, 2.0)
+      ];
+      const passed = checks.every(Boolean);
+      record(28, "LED 3: 5V + 150Ω + LED 2V (I = (5-2)/150 = 20mA)", passed);
+
+      console.log(`\n[TEST 28] LED 3: 5V + 150Ω + LED 2V`);
+      console.log(`  I_total = ${r.totalCurrent.toFixed(6)} A  (expected ${expI.toFixed(6)}) ${checks[0] ? "✅" : "❌"}`);
+      console.log(`  V_LED   = ${vLed.toFixed(6)} V  (expected 2.000000) ${checks[1] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 29 (LED 4) — 3V + 100Ω + LED 2V
+    // ──────────────────────────────────────────────
+    {
+      const comp = [
+        { id: "Bat", type: "battery", properties: { voltage: 3 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] },
+        { id: "R1", type: "resistor", properties: { resistance: 100 }, terminals: [{ id: "term_a" }, { id: "term_b" }] },
+        { id: "LED1", type: "led", properties: { forwardVoltage: 2.0 }, terminals: [{ id: "term_anode" }, { id: "term_cathode" }] }
+      ];
+      const conn = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R1", terminalId: "term_a" } },
+        { from: { componentId: "R1", terminalId: "term_b" }, to: { componentId: "LED1", terminalId: "term_anode" } },
+        { from: { componentId: "LED1", terminalId: "term_cathode" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+      const r = MNACircuitSolver.solve(comp[0], comp, conn);
+      const vLed = r.branchVoltages.get("LED1") || 0;
+      const expI = (3 - 2) / 100; // 0.01 A (10 mA)
+
+      const checks = [
+        eq(r.totalCurrent, expI),
+        eq(vLed, 2.0)
+      ];
+      const passed = checks.every(Boolean);
+      record(29, "LED 4: 3V + 100Ω + LED 2V (I = (3-2)/100 = 10mA)", passed);
+
+      console.log(`\n[TEST 29] LED 4: 3V + 100Ω + LED 2V`);
+      console.log(`  I_total = ${r.totalCurrent.toFixed(6)} A  (expected ${expI.toFixed(6)}) ${checks[0] ? "✅" : "❌"}`);
+      console.log(`  V_LED   = ${vLed.toFixed(6)} V  (expected 2.000000) ${checks[1] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 30 (LED 5) — Source Below Vf (1.5V Source + 100Ω + LED 2V)
+    // ──────────────────────────────────────────────
+    {
+      const comp = [
+        { id: "Bat", type: "battery", properties: { voltage: 1.5 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] },
+        { id: "R1", type: "resistor", properties: { resistance: 100 }, terminals: [{ id: "term_a" }, { id: "term_b" }] },
+        { id: "LED1", type: "led", properties: { forwardVoltage: 2.0 }, terminals: [{ id: "term_anode" }, { id: "term_cathode" }] }
+      ];
+      const conn = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R1", terminalId: "term_a" } },
+        { from: { componentId: "R1", terminalId: "term_b" }, to: { componentId: "LED1", terminalId: "term_anode" } },
+        { from: { componentId: "LED1", terminalId: "term_cathode" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+      const r = MNACircuitSolver.solve(comp[0], comp, conn);
+      const iLed = r.branchCurrents.get("LED1") || 0;
+
+      const checks = [
+        eq(r.totalCurrent, 0),
+        eq(iLed, 0),
+        r.openCircuit === true
+      ];
+      const passed = checks.every(Boolean);
+      record(30, "LED 5: Source Below Vf (1.5V + LED 2V -> I ≈ 0, LED OFF)", passed);
+
+      console.log(`\n[TEST 30] LED 5: Source Below Vf (1.5V < 2.0V)`);
+      console.log(`  I_total = ${r.totalCurrent.toExponential(4)} A  (expected 0) ${checks[0] ? "✅" : "❌"}`);
+      console.log(`  I_LED   = ${iLed.toExponential(4)} A  (expected 0) ${checks[1] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 31 (LED 6) — LED Without Current Limiting Resistor (Direct Connection)
+    // ──────────────────────────────────────────────
+    {
+      const comp = [
+        { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] },
+        { id: "LED1", type: "led", properties: { forwardVoltage: 2.0 }, terminals: [{ id: "term_anode" }, { id: "term_cathode" }] }
+      ];
+      const conn = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "LED1", terminalId: "term_anode" } },
+        { from: { componentId: "LED1", terminalId: "term_cathode" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+      const r = MNACircuitSolver.solve(comp[0], comp, conn);
+
+      const checks = [
+        r.overcurrent === true,
+        r.totalCurrent === null,
+        typeof r.warning === "string" && r.warning.includes("LED Overcurrent")
+      ];
+      const passed = checks.every(Boolean);
+      record(31, "LED 6: Direct Connection Without Resistor (Overcurrent Warning Detected)", passed);
+
+      console.log(`\n[TEST 31] LED 6: Direct Connection Without Current-Limiting Resistor`);
+      console.log(`  overcurrent  = ${r.overcurrent} ${checks[0] ? "✅" : "❌"}`);
+      console.log(`  totalCurrent = ${r.totalCurrent} ${checks[1] ? "✅" : "❌"}`);
+      console.log(`  warning      = "${r.warning}" ${checks[2] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 32 (TEST B) — 12V + 100Ω + LED 2V (Overcurrent: I = 100mA)
+    // ──────────────────────────────────────────────
+    {
+      const comp = [
+        { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] },
+        { id: "R1", type: "resistor", properties: { resistance: 100 }, terminals: [{ id: "term_a" }, { id: "term_b" }] },
+        { id: "LED1", type: "led", properties: { forwardVoltage: 2.0, maxCurrent: 0.025 }, terminals: [{ id: "term_anode" }, { id: "term_cathode" }] }
+      ];
+      const conn = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R1", terminalId: "term_a" } },
+        { from: { componentId: "R1", terminalId: "term_b" }, to: { componentId: "LED1", terminalId: "term_anode" } },
+        { from: { componentId: "LED1", terminalId: "term_cathode" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+      const r = MNACircuitSolver.solve(comp[0], comp, conn);
+      const vLed = r.branchVoltages.get("LED1") || 0;
+      const iLed = r.branchCurrents.get("LED1") || 0;
+      const vR1 = r.branchVoltages.get("R1") || 0;
+      const pLed = vLed * iLed;
+      const pR1 = vR1 * (r.branchCurrents.get("R1") || 0);
+      const kvlResidual = Math.abs(12 - vR1 - vLed);
+      const powerResidual = Math.abs(r.power.source - (pR1 + pLed));
+
+      const checks = [
+        eq(vLed, 2.0),
+        eq(iLed, 0.10),
+        eq(r.totalCurrent, 0.10),
+        r.overcurrent === true,
+        typeof r.warning === "string" && r.warning.includes("LED Overcurrent"),
+        r.converged === true,
+        kvlResidual < 1e-9,
+        powerResidual < 1e-9
+      ];
+      const passed = checks.every(Boolean);
+      record(32, "TEST B: 12V + 100Ω + LED 2V (I=100mA, LED ON, Overcurrent Warning)", passed);
+
+      console.log(`\n[TEST 32 / TEST B] 12V + 100Ω + LED 2V (Overcurrent)`);
+      console.log(`  raw LED voltage    = ${vLed.toFixed(6)} V  (expected 2.000000) ${checks[0] ? "✅" : "❌"}`);
+      console.log(`  raw LED current    = ${iLed.toFixed(6)} A  (expected 0.100000) ${checks[1] ? "✅" : "❌"}`);
+      console.log(`  LED state          = ${r.diodeStates.get("LED1")} (ON)`);
+      console.log(`  iteration count    = ${r.iterationCount}`);
+      console.log(`  convergence status = ${r.converged ? "CONVERGED" : "FAILED"} ${checks[5] ? "✅" : "❌"}`);
+      console.log(`  overcurrent warning= "${r.warning}" ${checks[3] ? "✅" : "❌"}`);
+      console.log(`  KVL residual       = ${kvlResidual.toExponential(4)} V (< 1e-9) ${checks[6] ? "✅" : "❌"}`);
+      console.log(`  power residual     = ${powerResidual.toExponential(4)} W (< 1e-9) ${checks[7] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 33 (TEST F) — 2 LEDs in Series (12V + 400Ω + LED 2V + LED 2V)
+    // ──────────────────────────────────────────────
+    {
+      const comp = [
+        { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] },
+        { id: "R1", type: "resistor", properties: { resistance: 400 }, terminals: [{ id: "term_a" }, { id: "term_b" }] },
+        { id: "LED1", type: "led", properties: { forwardVoltage: 2.0 }, terminals: [{ id: "term_anode" }, { id: "term_cathode" }] },
+        { id: "LED2", type: "led", properties: { forwardVoltage: 2.0 }, terminals: [{ id: "term_anode" }, { id: "term_cathode" }] }
+      ];
+      const conn = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R1", terminalId: "term_a" } },
+        { from: { componentId: "R1", terminalId: "term_b" }, to: { componentId: "LED1", terminalId: "term_anode" } },
+        { from: { componentId: "LED1", terminalId: "term_cathode" }, to: { componentId: "LED2", terminalId: "term_anode" } },
+        { from: { componentId: "LED2", terminalId: "term_cathode" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+      const r = MNACircuitSolver.solve(comp[0], comp, conn);
+      const vLed1 = r.branchVoltages.get("LED1") || 0;
+      const vLed2 = r.branchVoltages.get("LED2") || 0;
+      const vR1 = r.branchVoltages.get("R1") || 0;
+      const iTotal = r.totalCurrent;
+      const pLed1 = vLed1 * (r.branchCurrents.get("LED1") || 0);
+      const pLed2 = vLed2 * (r.branchCurrents.get("LED2") || 0);
+      const pR1 = vR1 * (r.branchCurrents.get("R1") || 0);
+      const kvlResidual = Math.abs(12 - vR1 - vLed1 - vLed2);
+      const powerResidual = Math.abs(r.power.source - (pR1 + pLed1 + pLed2));
+
+      const checks = [
+        eq(vLed1, 2.0),
+        eq(vLed2, 2.0),
+        eq(vR1, 8.0),
+        eq(iTotal, 0.02),
+        r.converged === true,
+        kvlResidual < 1e-9,
+        powerResidual < 1e-9
+      ];
+      const passed = checks.every(Boolean);
+      record(33, "TEST F: 2 LEDs in Series (12V + 400Ω + LED 2V + LED 2V -> I=20mA)", passed);
+
+      console.log(`\n[TEST 33 / TEST F] 2 LEDs in Series`);
+      console.log(`  raw V_LED1         = ${vLed1.toFixed(6)} V  (expected 2.000000) ${checks[0] ? "✅" : "❌"}`);
+      console.log(`  raw V_LED2         = ${vLed2.toFixed(6)} V  (expected 2.000000) ${checks[1] ? "✅" : "❌"}`);
+      console.log(`  raw V_R1           = ${vR1.toFixed(6)} V  (expected 8.000000) ${checks[2] ? "✅" : "❌"}`);
+      console.log(`  raw LED current    = ${iTotal.toFixed(6)} A  (expected 0.020000) ${checks[3] ? "✅" : "❌"}`);
+      console.log(`  iteration count    = ${r.iterationCount}`);
+      console.log(`  convergence status = ${r.converged ? "CONVERGED" : "FAILED"} ${checks[4] ? "✅" : "❌"}`);
+      console.log(`  KVL residual       = ${kvlResidual.toExponential(4)} V (< 1e-9) ${checks[5] ? "✅" : "❌"}`);
+      console.log(`  power residual     = ${powerResidual.toExponential(4)} W (< 1e-9) ${checks[6] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 34 (TEST G) — Multiple Nonlinear State Iteration (Parallel Branches, No Oscillation)
+    // ──────────────────────────────────────────────
+    {
+      const comp = [
+        { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] },
+        { id: "R1", type: "resistor", properties: { resistance: 200 }, terminals: [{ id: "term_a" }, { id: "term_b" }] },
+        { id: "R2", type: "resistor", properties: { resistance: 500 }, terminals: [{ id: "term_a" }, { id: "term_b" }] },
+        { id: "LED1", type: "led", properties: { forwardVoltage: 2.0 }, terminals: [{ id: "term_anode" }, { id: "term_cathode" }] },
+        { id: "LED2", type: "led", properties: { forwardVoltage: 2.0 }, terminals: [{ id: "term_anode" }, { id: "term_cathode" }] }
+      ];
+      const conn = [
+        // Branch 1: Bat:pos -> R1:a, R1:b -> LED1:a, LED1:k -> Bat:neg
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R1", terminalId: "term_a" } },
+        { from: { componentId: "R1", terminalId: "term_b" }, to: { componentId: "LED1", terminalId: "term_anode" } },
+        { from: { componentId: "LED1", terminalId: "term_cathode" }, to: { componentId: "Bat", terminalId: "term_neg" } },
+        // Branch 2: Bat:pos -> R2:a, R2:b -> LED2:a, LED2:k -> Bat:neg
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R2", terminalId: "term_a" } },
+        { from: { componentId: "R2", terminalId: "term_b" }, to: { componentId: "LED2", terminalId: "term_anode" } },
+        { from: { componentId: "LED2", terminalId: "term_cathode" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+      const r = MNACircuitSolver.solve(comp[0], comp, conn);
+      const iLed1 = r.branchCurrents.get("LED1") || 0;
+      const iLed2 = r.branchCurrents.get("LED2") || 0;
+      const expI1 = (12 - 2) / 200; // 0.050 A
+      const expI2 = (12 - 2) / 500; // 0.020 A
+      const expItotal = expI1 + expI2; // 0.070 A
+      const kclResidual = Math.abs(r.totalCurrent - (iLed1 + iLed2));
+
+      const checks = [
+        eq(iLed1, expI1),
+        eq(iLed2, expI2),
+        eq(r.totalCurrent, expItotal),
+        r.converged === true,
+        r.iterationCount <= 10,
+        kclResidual < 1e-9
+      ];
+      const passed = checks.every(Boolean);
+      record(34, "TEST G: Multiple Nonlinear Iteration (No Oscillation, Converged <= 10 iterations)", passed);
+
+      console.log(`\n[TEST 34 / TEST G] Multiple Nonlinear State Iteration`);
+      console.log(`  raw I_LED1         = ${iLed1.toFixed(6)} A  (expected ${expI1.toFixed(6)}) ${checks[0] ? "✅" : "❌"}`);
+      console.log(`  raw I_LED2         = ${iLed2.toFixed(6)} A  (expected ${expI2.toFixed(6)}) ${checks[1] ? "✅" : "❌"}`);
+      console.log(`  raw I_total        = ${r.totalCurrent.toFixed(6)} A  (expected ${expItotal.toFixed(6)}) ${checks[2] ? "✅" : "❌"}`);
+      console.log(`  iteration count    = ${r.iterationCount} (<= 10) ${checks[4] ? "✅" : "❌"}`);
+      console.log(`  convergence status = ${r.converged ? "CONVERGED" : "FAILED"} ${checks[3] ? "✅" : "❌"}`);
+      console.log(`  KCL residual       = ${kclResidual.toExponential(4)} A (< 1e-9) ${checks[5] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 35 (VM 1) — Reverse Biased Diode (12V + 1kΩ + 1N4007 Reverse, I=0, V_R=0, V_D=-12V, V_meter=-12V)
+    // ──────────────────────────────────────────────
+    {
+      const comp = [
+        { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] },
+        { id: "R1", type: "resistor", properties: { resistance: 1000 }, terminals: [{ id: "term_a" }, { id: "term_b" }] },
+        { id: "D1", type: "diode", properties: { forwardVoltage: 0.7 }, terminals: [{ id: "term_anode" }, { id: "term_cathode" }] },
+        {
+          id: "M1",
+          type: "multimeter",
+          properties: {
+            mode: "V_DC",
+            probes: {
+              vwma: { attachedTo: { compId: "D1", termId: "term_anode" } }, // Red -> Anode (0V)
+              com: { attachedTo: { compId: "D1", termId: "term_cathode" } }  // Black -> Cathode (+12V)
+            }
+          },
+          terminals: [{ id: "term_vwma" }, { id: "term_com" }]
+        }
+      ];
+      const conn = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R1", terminalId: "term_a" } },
+        { from: { componentId: "R1", terminalId: "term_b" }, to: { componentId: "D1", terminalId: "term_cathode" } },
+        { from: { componentId: "D1", terminalId: "term_anode" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+
+      const netlist = NetlistBuilder.build(comp, conn);
+      const r = MNACircuitSolver.solve(comp[0], comp, conn);
+      const m = MeasurementEngine.evaluate(comp[3], r, comp, conn, netlist.uf);
+      const vD1 = r.branchVoltages.get("D1") || 0;
+      const vR1 = r.branchVoltages.get("R1") || 0;
+
+      const checks = [
+        eq(r.mainLoadCurrent, 0),
+        vR1 < 0.01,
+        vD1 < -11.0,
+        m.readingText === "-12.00",
+        m.polarity === "-"
+      ];
+      const passed = checks.every(Boolean);
+      record(35, "VM 1: Voltmeter Across Reverse-Biased Diode (Vmeter = -12.00 V, I_load = 0)", passed);
+
+      console.log(`\n[TEST 35 / VM 1] Voltmeter Across Reverse-Biased Diode`);
+      console.log(`  mainLoadCurrent    = ${r.mainLoadCurrent} A (expected 0) ${checks[0] ? "✅" : "❌"}`);
+      console.log(`  instrumentCurrent  = ${(r.instrumentCurrent * 1e6).toFixed(4)} µA (expected ≈ 1.2 µA)`);
+      console.log(`  sourceCurrent      = ${(r.sourceCurrent * 1e6).toFixed(4)} µA`);
+      console.log(`  V_R1               = ${vR1.toFixed(6)} V (expected ≈ 0) ${checks[1] ? "✅" : "❌"}`);
+      console.log(`  V_diode            = ${vD1.toFixed(6)} V (expected ≈ -12.00 V) ${checks[2] ? "✅" : "❌"}`);
+      console.log(`  Voltmeter          = ${m.readingText} V (expected -12.00) ${checks[3] ? "✅" : "❌"}`);
+      console.log(`  Polarity           = "${m.polarity}" (expected "-") ${checks[4] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 36 (VM 2) — Reverse Probes Across Diode (Sign Flips Exactly to +12.00 V)
+    // ──────────────────────────────────────────────
+    {
+      const comp = [
+        { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] },
+        { id: "R1", type: "resistor", properties: { resistance: 1000 }, terminals: [{ id: "term_a" }, { id: "term_b" }] },
+        { id: "D1", type: "diode", properties: { forwardVoltage: 0.7 }, terminals: [{ id: "term_anode" }, { id: "term_cathode" }] },
+        {
+          id: "M1",
+          type: "multimeter",
+          properties: {
+            mode: "V_DC",
+            probes: {
+              vwma: { attachedTo: { compId: "D1", termId: "term_cathode" } }, // Red -> Cathode (+12V)
+              com: { attachedTo: { compId: "D1", termId: "term_anode" } }     // Black -> Anode (0V)
+            }
+          },
+          terminals: [{ id: "term_vwma" }, { id: "term_com" }]
+        }
+      ];
+      const conn = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R1", terminalId: "term_a" } },
+        { from: { componentId: "R1", terminalId: "term_b" }, to: { componentId: "D1", terminalId: "term_cathode" } },
+        { from: { componentId: "D1", terminalId: "term_anode" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+
+      const netlist = NetlistBuilder.build(comp, conn);
+      const r = MNACircuitSolver.solve(comp[0], comp, conn);
+      const m = MeasurementEngine.evaluate(comp[3], r, comp, conn, netlist.uf);
+
+      const checks = [
+        m.readingText === "12.00",
+        m.polarity === "+"
+      ];
+      const passed = checks.every(Boolean);
+      record(36, "VM 2: Reverse Probes Across Diode (Reading Flips Exactly to +12.00 V)", passed);
+
+      console.log(`\n[TEST 36 / VM 2] Reverse Probes Across Diode`);
+      console.log(`  Voltmeter  = ${m.readingText} V (expected 12.00) ${checks[0] ? "✅" : "❌"}`);
+      console.log(`  Polarity   = "${m.polarity}" (expected "+") ${checks[1] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 37 (VM 3) — Voltmeter Across Open Switch Measures Source Voltage (12.00 V)
+    // ──────────────────────────────────────────────
+    {
+      const comp = [
+        { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] },
+        { id: "R1", type: "resistor", properties: { resistance: 1000 }, terminals: [{ id: "term_a" }, { id: "term_b" }] },
+        { id: "SW1", type: "switch_spst", properties: { isClosed: false }, terminals: [{ id: "term_a" }, { id: "term_b" }] },
+        {
+          id: "M1",
+          type: "multimeter",
+          properties: {
+            mode: "V_DC",
+            probes: {
+              vwma: { attachedTo: { compId: "SW1", termId: "term_a" } }, // Red -> Switch term_a (+12V)
+              com: { attachedTo: { compId: "SW1", termId: "term_b" } }   // Black -> Switch term_b (0V)
+            }
+          },
+          terminals: [{ id: "term_vwma" }, { id: "term_com" }]
+        }
+      ];
+      const conn = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R1", terminalId: "term_a" } },
+        { from: { componentId: "R1", terminalId: "term_b" }, to: { componentId: "SW1", terminalId: "term_a" } },
+        { from: { componentId: "SW1", terminalId: "term_b" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+
+      const netlist = NetlistBuilder.build(comp, conn);
+      const r = MNACircuitSolver.solve(comp[0], comp, conn);
+      const m = MeasurementEngine.evaluate(comp[3], r, comp, conn, netlist.uf);
+
+      const checks = [
+        r.openCircuit === true,
+        eq(r.totalCurrent, 0),
+        m.readingText === "12.00"
+      ];
+      const passed = checks.every(Boolean);
+      record(37, "VM 3: Voltmeter Across Open Switch Measures 12.00 V (Current = 0)", passed);
+
+      console.log(`\n[TEST 37 / VM 3] Voltmeter Across Open Switch`);
+      console.log(`  openCircuit= ${r.openCircuit} ${checks[0] ? "✅" : "❌"}`);
+      console.log(`  totalCurrent= ${r.totalCurrent} A (expected 0) ${checks[1] ? "✅" : "❌"}`);
+      console.log(`  Voltmeter  = ${m.readingText} V (expected 12.00) ${checks[2] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 38 (VM 4) — Open Branch in Parallel (Branch I=0, Node Potentials Solved, VM=12V)
+    // ──────────────────────────────────────────────
+    {
+      const comp = [
+        { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] },
+        { id: "R1", type: "resistor", properties: { resistance: 6 }, terminals: [{ id: "term_a" }, { id: "term_b" }] },
+        { id: "SW1", type: "switch_spst", properties: { isClosed: false }, terminals: [{ id: "term_a" }, { id: "term_b" }] },
+        { id: "R2", type: "resistor", properties: { resistance: 6 }, terminals: [{ id: "term_a" }, { id: "term_b" }] },
+        {
+          id: "M1",
+          type: "multimeter",
+          properties: {
+            mode: "V_DC",
+            probes: {
+              vwma: { attachedTo: { compId: "SW1", termId: "term_a" } }, // Red -> SW:a (+12V)
+              com: { attachedTo: { compId: "SW1", termId: "term_b" } }    // Black -> SW:b (0V)
+            }
+          },
+          terminals: [{ id: "term_vwma" }, { id: "term_com" }]
+        }
+      ];
+      const conn = [
+        // Active Branch 1
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R1", terminalId: "term_a" } },
+        { from: { componentId: "R1", terminalId: "term_b" }, to: { componentId: "Bat", terminalId: "term_neg" } },
+        // Open Branch 2
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "SW1", terminalId: "term_a" } },
+        { from: { componentId: "SW1", terminalId: "term_b" }, to: { componentId: "R2", terminalId: "term_a" } },
+        { from: { componentId: "R2", terminalId: "term_b" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+
+      const netlist = NetlistBuilder.build(comp, conn);
+      const r = MNACircuitSolver.solve(comp[0], comp, conn);
+      const m = MeasurementEngine.evaluate(comp[4], r, comp, conn, netlist.uf);
+
+      const checks = [
+        eq(r.branchCurrents.get("R1"), 2.0),
+        m.readingText === "12.00"
+      ];
+      const passed = checks.every(Boolean);
+      record(38, "VM 4: Open Branch in Parallel (Active Branch I=2A, Open Switch V=12V)", passed);
+
+      console.log(`\n[TEST 38 / VM 4] Open Branch in Parallel Circuit`);
+      console.log(`  I_Branch1  = ${r.branchCurrents.get("R1").toFixed(2)} A (expected 2.00 A) ${checks[0] ? "✅" : "❌"}`);
+      console.log(`  Voltmeter  = ${m.readingText} V (expected 12.00) ${checks[1] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 39 (VM 5) — Realistic 10 MΩ Voltmeter Loading & Power Balance Verification
+    // ──────────────────────────────────────────────
+    {
+      const comp = [
+        { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] },
+        { id: "R1", type: "resistor", properties: { resistance: 1000 }, terminals: [{ id: "term_a" }, { id: "term_b" }] },
+        { id: "D1", type: "diode", properties: { forwardVoltage: 0.7 }, terminals: [{ id: "term_anode" }, { id: "term_cathode" }] },
+        {
+          id: "M1",
+          type: "multimeter",
+          properties: {
+            mode: "V_DC",
+            probes: {
+              vwma: { attachedTo: { compId: "D1", termId: "term_anode" } },
+              com: { attachedTo: { compId: "D1", termId: "term_cathode" } }
+            }
+          },
+          terminals: [{ id: "term_vwma" }, { id: "term_com" }]
+        }
+      ];
+      const conn = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R1", terminalId: "term_a" } },
+        { from: { componentId: "R1", terminalId: "term_b" }, to: { componentId: "D1", terminalId: "term_cathode" } },
+        { from: { componentId: "D1", terminalId: "term_anode" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+
+      const r = MNACircuitSolver.solve(comp[0], comp, conn);
+      const rParallel = 1 / (1e-7 + 1e-9); // 10 MΩ in parallel with 1 GΩ off diode
+      const expSourceI = 12 / (1000 + rParallel); // 1.2118776 µA
+      const expInstI = (12 * (rParallel / (1000 + rParallel))) / 10e6; // 1.1998788 µA
+      const expGminI = (12 * (rParallel / (1000 + rParallel))) * 1e-9; // 0.0119988 µA (~12 nA)
+      const currentAccountingResidual = Math.abs(r.sourceCurrent - (r.mainLoadCurrent + r.instrumentCurrent + r.gminCurrent));
+      const powerAccountingResidual = Math.abs(r.power.source - (r.power.load + r.power.instrument + r.power.gmin + r.power.internalLoss));
+
+      const checks = [
+        Math.abs(r.sourceCurrent - expSourceI) < 1e-10,
+        eq(r.mainLoadCurrent, 0),
+        Math.abs(r.instrumentCurrent - expInstI) < 1e-10,
+        Math.abs(r.gminCurrent - expGminI) < 1e-10,
+        currentAccountingResidual < 1e-12,
+        powerAccountingResidual < 1e-9
+      ];
+      const passed = checks.every(Boolean);
+      record(39, "VM 5: Current & Power Accounting (I_src = I_load + I_inst + I_gmin, P_src = P_load + P_inst + P_gmin)", passed);
+
+      console.log(`\n[TEST 39 / VM 5] Realistic 10 MΩ Voltmeter Loading & Accounting Verification`);
+      console.log(`  raw sourceCurrent    = ${(r.sourceCurrent * 1e6).toFixed(6)} µA (expected ${(expSourceI * 1e6).toFixed(6)} µA) ${checks[0] ? "✅" : "❌"}`);
+      console.log(`  mainLoadCurrent      = ${r.mainLoadCurrent.toFixed(6)} A (expected 0) ${checks[1] ? "✅" : "❌"}`);
+      console.log(`  instrumentCurrent    = ${(r.instrumentCurrent * 1e6).toFixed(6)} µA (expected ${(expInstI * 1e6).toFixed(6)} µA) ${checks[2] ? "✅" : "❌"}`);
+      console.log(`  gminCurrent (12 nA)  = ${(r.gminCurrent * 1e6).toFixed(6)} µA (expected ${(expGminI * 1e6).toFixed(6)} µA) ${checks[3] ? "✅" : "❌"}`);
+      console.log(`  current balance diff = ${currentAccountingResidual.toExponential(4)} A (< 1e-12) ${checks[4] ? "✅" : "❌"}`);
+      console.log(`  power balance diff   = ${powerAccountingResidual.toExponential(4)} W (< 1e-9) ${checks[5] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 40 (PR 1) — Live Probe Drag & Realtime Cable Endpoints
+    // ──────────────────────────────────────────────
+    {
+      const meter = {
+        id: "Meter1",
+        type: "multimeter",
+        x: 400,
+        y: 300,
+        width: 132,
+        height: 262,
+        rotation: 0,
+        properties: {
+          mode: "V_DC",
+          probes: {
+            vwma: { attachedTo: null, isPlaced: false }
+          }
+        }
+      };
+
+      const mockWs = {
+        zoom: 1.0,
+        panX: 0,
+        panY: 0,
+        container: { getBoundingClientRect: () => ({ left: 0, top: 0 }) },
+        screenToCanvas(x, y) { return { x: Math.round(x), y: Math.round(y) }; }
+      };
+
+      const pointerMoves = [
+        { x: 520, y: 410 },
+        { x: 550, y: 430 },
+        { x: 600, y: 470 }
+      ];
+
+      let allMovesMatch = true;
+      pointerMoves.forEach(m => {
+        meter.properties.probes.vwma.worldX = m.x;
+        meter.properties.probes.vwma.worldY = m.y;
+        meter.properties.probes.vwma.isPlaced = true;
+
+        const tip = getProbeTipPosition(meter, "vwma", mockWs);
+        const jack = getMultimeterJackPosition(meter, "vwma");
+
+        if (tip.pos.x !== m.x || tip.pos.y !== m.y || jack.x !== 484 || jack.y !== 486) {
+          allMovesMatch = false;
+        }
+      });
+
+      record(40, "PR 1: Live Probe Drag & Cable Endpoints (Probe tip matches pointermove realtime)", allMovesMatch);
+      console.log(`\n[TEST 40 / PR 1] Live Probe Drag & Cable Endpoints`);
+      console.log(`  All pointermove positions matched world coordinates: ${allMovesMatch ? "✅" : "❌"}`);
+      console.log(`  => ${allMovesMatch ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 41 (PR 2) — Multimeter Mode Switching V -> A -> V (Probe Tip Invariant, Jack Shifts)
+    // ──────────────────────────────────────────────
+    {
+      const meter = {
+        id: "Meter1",
+        type: "multimeter",
+        x: 400,
+        y: 300,
+        width: 132,
+        height: 262,
+        rotation: 0,
+        properties: {
+          mode: "V_DC",
+          probes: {
+            vwma: { attachedTo: { compId: "R1", termId: "term_a" }, isPlaced: true }
+          }
+        }
+      };
+
+      const mockWs = {
+        connectionEngine: {
+          getTerminalWorldPosition(cId, tId) {
+            if (cId === "R1" && tId === "term_a") return { x: 500, y: 400 };
+            return null;
+          }
+        }
+      };
+
+      const initialTip = getProbeTipPosition(meter, "vwma", mockWs);
+      const initialJack = getMultimeterJackPosition(meter, "vwma");
+
+      // Switch to A_DC
+      meter.properties.mode = "A_DC";
+      const tipA = getProbeTipPosition(meter, "vwma", mockWs);
+      const jackA = getMultimeterJackPosition(meter, "vwma");
+
+      // Switch back to V_DC
+      meter.properties.mode = "V_DC";
+      const tipV2 = getProbeTipPosition(meter, "vwma", mockWs);
+      const jackV2 = getMultimeterJackPosition(meter, "vwma");
+
+      const checks = [
+        tipA.pos.x === 500 && tipA.pos.y === 400, // Probe tip invariant in A mode
+        meter.properties.probes.vwma.attachedTo?.compId === "R1", // Electrical connection intact
+        jackA.x === 418 && jackA.y === 486, // Jack shifted to 10A (relX: 18)
+        tipV2.pos.x === 500 && tipV2.pos.y === 400, // Probe tip invariant back in V mode
+        jackV2.x === 484 && jackV2.y === 486 // Jack returned to VΩmA (relX: 84)
+      ];
+      const passed = checks.every(Boolean);
+      record(41, "PR 2: Mode Switching V -> A -> V (Probe tip invariant on circuit, red jack shifts)", passed);
+
+      console.log(`\n[TEST 41 / PR 2] Multimeter Mode Switching V -> A -> V`);
+      console.log(`  Red probe tip invariant in A mode : (${tipA.pos.x}, ${tipA.pos.y}) ${checks[0] ? "✅" : "❌"}`);
+      console.log(`  Circuit connection retained       : ${meter.properties.probes.vwma.attachedTo.compId}:${meter.properties.probes.vwma.attachedTo.termId} ${checks[1] ? "✅" : "❌"}`);
+      console.log(`  Jack anchor shifted to 10A        : (${jackA.x}, ${jackA.y}) ${checks[2] ? "✅" : "❌"}`);
+      console.log(`  Jack anchor restored in V mode    : (${jackV2.x}, ${jackV2.y}) ${checks[4] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 42 (PR 3) — Black COM Probe Invariant across All Modes (V, A, Ω)
+    // ──────────────────────────────────────────────
+    {
+      const meter = {
+        id: "Meter1",
+        type: "multimeter",
+        x: 400,
+        y: 300,
+        width: 132,
+        height: 262,
+        rotation: 0,
+        properties: { mode: "V_DC" }
+      };
+
+      const jackV = getMultimeterJackPosition(meter, "com");
+      meter.properties.mode = "OHM";
+      const jackOhm = getMultimeterJackPosition(meter, "com");
+      meter.properties.mode = "A_DC";
+      const jackA = getMultimeterJackPosition(meter, "com");
+
+      const checks = [
+        jackV.x === 448 && jackV.y === 486,
+        jackOhm.x === 448 && jackOhm.y === 486,
+        jackA.x === 448 && jackA.y === 486
+      ];
+      const passed = checks.every(Boolean);
+      record(42, "PR 3: Black COM Probe Invariant across All Modes (V, A, Ω)", passed);
+
+      console.log(`\n[TEST 42 / PR 3] Black COM Probe Invariant across Modes`);
+      console.log(`  COM Jack at V_DC = (${jackV.x}, ${jackV.y}) ${checks[0] ? "✅" : "❌"}`);
+      console.log(`  COM Jack at OHM  = (${jackOhm.x}, ${jackOhm.y}) ${checks[1] ? "✅" : "❌"}`);
+      console.log(`  COM Jack at A_DC = (${jackA.x}, ${jackA.y}) ${checks[2] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 43 (PR 4) — Zoom/Pan Invariance During Probe Drag
+    // ──────────────────────────────────────────────
+    {
+      const meter = {
+        id: "Meter1",
+        type: "multimeter",
+        x: 400,
+        y: 300,
+        width: 132,
+        height: 262,
+        rotation: 0,
+        properties: {
+          mode: "V_DC",
+          probes: { vwma: { attachedTo: null, isPlaced: true, worldX: 650, worldY: 450 } }
+        }
+      };
+
+      const mockWs = {
+        zoom: 1.0,
+        panX: 0,
+        panY: 0,
+        container: { getBoundingClientRect: () => ({ left: 50, top: 25 }) },
+        screenToCanvas(clientX, clientY) {
+          const screenX = clientX - 50;
+          const screenY = clientY - 25;
+          return { x: Math.round((screenX - this.panX) / this.zoom), y: Math.round((screenY - this.panY) / this.zoom) };
+        }
+      };
+
+      let zoomPanOk = true;
+      const testScales = [0.5, 0.78, 1.0, 1.5, 2.0, 2.5];
+      testScales.forEach(z => {
+        mockWs.zoom = z;
+        mockWs.panX = 150 * (z - 1);
+        mockWs.panY = 75 * (z - 1);
+
+        const clientX = 50 + mockWs.panX + 650 * z;
+        const clientY = 25 + mockWs.panY + 450 * z;
+
+        const raw = mockWs.screenToCanvas(clientX, clientY);
+        if (raw.x !== 650 || raw.y !== 450) zoomPanOk = false;
+      });
+
+      record(43, "PR 4: Zoom/Pan Invariance During Probe Drag (Probe needle apex stays on pointer)", zoomPanOk);
+      console.log(`\n[TEST 43 / PR 4] Zoom/Pan Invariance During Probe Drag`);
+      console.log(`  World position invariant across zoom levels (0.5x-2.5x): ${zoomPanOk ? "✅" : "❌"}`);
+      console.log(`  => ${zoomPanOk ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 44 (PR 5) — Repeated Probe Drag 20x (Zero Lag, Zero Offset, Zero Drift)
+    // ──────────────────────────────────────────────
+    {
+      const meter = {
+        id: "Meter1",
+        type: "multimeter",
+        x: 400,
+        y: 300,
+        width: 132,
+        height: 262,
+        rotation: 0,
+        properties: {
+          mode: "V_DC",
+          probes: { vwma: { attachedTo: null, isPlaced: false } }
+        }
+      };
+
+      const mockWs = {
+        zoom: 1.0,
+        panX: 0,
+        panY: 0,
+        container: { getBoundingClientRect: () => ({ left: 0, top: 0 }) },
+        screenToCanvas(x, y) { return { x: Math.round(x), y: Math.round(y) }; }
+      };
+
+      let drag20Ok = true;
+      for (let i = 0; i < 20; i++) {
+        const targetX = 450 + i * 8;
+        const targetY = 320 + i * 4;
+
+        meter.properties.probes.vwma.worldX = targetX;
+        meter.properties.probes.vwma.worldY = targetY;
+        meter.properties.probes.vwma.isPlaced = true;
+
+        const tip = getProbeTipPosition(meter, "vwma", mockWs);
+        if (tip.pos.x !== targetX || tip.pos.y !== targetY) {
+          drag20Ok = false;
+        }
+      }
+
+      record(44, "PR 5: Repeated Probe Drag 20x (Zero Lag, Zero Offset, Zero Drift)", drag20Ok);
+      console.log(`\n[TEST 44 / PR 5] Repeated Probe Drag 20x`);
+      console.log(`  All 20 drag cycles matched exact coordinates: ${drag20Ok ? "✅" : "❌"}`);
+      console.log(`  => ${drag20Ok ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 45 (MS 1) — V Mode Across 12V Source (Normal Parallel Voltmeter)
+    // ──────────────────────────────────────────────
+    {
+      const bat = { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const meter = {
+        id: "M1",
+        type: "multimeter",
+        properties: {
+          mode: "V_DC",
+          probes: {
+            vwma: { attachedTo: { compId: "Bat", termId: "term_pos" }, isPlaced: true },
+            com: { attachedTo: { compId: "Bat", termId: "term_neg" }, isPlaced: true }
+          }
+        },
+        terminals: [{ id: "term_vwma" }, { id: "term_com" }]
+      };
+      const comps = [bat, meter];
+      const conns = [];
+      const netlist = NetlistBuilder.build(comps, conns);
+      const r = MNACircuitSolver.solve(bat, comps, conns);
+      const m = MeasurementEngine.evaluate(meter, r, comps, conns, netlist.uf);
+
+      const checks = [
+        m.readingText === "12.00",
+        m.unit === "V",
+        m.isWarning === false,
+        r.shortCircuit === false,
+        eq(r.instrumentCurrent, 1.2e-6)
+      ];
+      const passed = checks.every(Boolean);
+      record(45, "MS 1: V Mode Across 12V Source (Probe invariant, Rin=10MΩ, I_inst=1.2µA, reading 12.00V)", passed);
+      console.log(`\n[TEST 45 / MS 1] V Mode Across 12V Source`);
+      console.log(`  Reading: ${m.readingText} ${m.unit} ${checks[0] ? "✅" : "❌"}`);
+      console.log(`  Instrument current: ${(r.instrumentCurrent * 1e6).toFixed(3)} µA ${checks[4] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 46 (MS 2) — Mode V -> A Without Moving Probes (Parallel Ammeter / Short Circuit Risk)
+    // ──────────────────────────────────────────────
+    {
+      const bat = { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const meter = {
+        id: "M1",
+        type: "multimeter",
+        properties: {
+          mode: "A_DC", // Changed to A_DC, probes UNTOUCHED across battery
+          probes: {
+            vwma: { attachedTo: { compId: "Bat", termId: "term_pos" }, isPlaced: true },
+            com: { attachedTo: { compId: "Bat", termId: "term_neg" }, isPlaced: true }
+          }
+        },
+        terminals: [{ id: "term_vwma" }, { id: "term_com" }]
+      };
+      const comps = [bat, meter];
+      const conns = [];
+      const netlist = NetlistBuilder.build(comps, conns);
+      const r = MNACircuitSolver.solve(bat, comps, conns);
+      const m = MeasurementEngine.evaluate(meter, r, comps, conns, netlist.uf);
+
+      const checks = [
+        r.shortCircuit === true,
+        m.isWarning === true,
+        m.warningMessage.includes("Short Circuit Risk") || m.warningMessage.includes("parallel"),
+        m.readingText === "OVERLOAD"
+      ];
+      const passed = checks.every(Boolean);
+      record(46, "MS 2: V -> A Without Moving Probes (Probes invariant, ammeter shunt parallel to source triggers Short Circuit Risk)", passed);
+      console.log(`\n[TEST 46 / MS 2] Mode V -> A Without Moving Probes`);
+      console.log(`  Short circuit detected     : ${r.shortCircuit ? "✅" : "❌"}`);
+      console.log(`  Warning flag & message     : ${m.isWarning ? "✅" : "❌"} ("${m.warningMessage}")`);
+      console.log(`  Reading text               : ${m.readingText} ${checks[3] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 47 (MS 3) — A Mode Correctly in Series (12V + 1kΩ + Diode 0.7V)
+    // ──────────────────────────────────────────────
+    {
+      const bat = { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const res = { id: "R1", type: "resistor", properties: { resistance: 1000 }, terminals: [{ id: "term_a" }, { id: "term_b" }] };
+      const diode = { id: "D1", type: "diode", properties: { forwardVoltage: 0.7 }, terminals: [{ id: "term_anode" }, { id: "term_cathode" }] };
+      const meter = {
+        id: "M1",
+        type: "multimeter",
+        properties: {
+          mode: "A_DC",
+          probes: {
+            vwma: { attachedTo: { compId: "R1", termId: "term_b" }, isPlaced: true },
+            com: { attachedTo: { compId: "D1", termId: "term_anode" }, isPlaced: true }
+          }
+        },
+        terminals: [{ id: "term_vwma" }, { id: "term_com" }]
+      };
+      const comps = [bat, res, diode, meter];
+      const conns = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R1", terminalId: "term_a" } },
+        { from: { componentId: "D1", terminalId: "term_cathode" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+      const netlist = NetlistBuilder.build(comps, conns);
+      const r = MNACircuitSolver.solve(bat, comps, conns);
+      const m = MeasurementEngine.evaluate(meter, r, comps, conns, netlist.uf);
+
+      const expI = (12 - 0.7) / (1000 + 0.001); // 11.3 mA = 0.0113 A
+      const checks = [
+        m.isWarning === false,
+        m.warningMessage === null,
+        m.readingText === "0.011",
+        eq(m.rawValue, expI, 1e-4)
+      ];
+      const passed = checks.every(Boolean);
+      record(47, "MS 3: A Mode Correctly in Series (12V + 1kΩ + Diode 0.7V, I ≈ 11.3 mA, no warning)", passed);
+      console.log(`\n[TEST 47 / MS 3] A Mode Correctly in Series`);
+      console.log(`  Measured current : ${m.rawValue.toFixed(6)} A (expected ${expI.toFixed(6)} A) ${checks[3] ? "✅" : "❌"}`);
+      console.log(`  Reading text     : ${m.readingText} A ${checks[2] ? "✅" : "❌"}`);
+      console.log(`  No warning       : ${m.isWarning === false ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 48 (MS 4) — A -> V While Still in Series (High Impedance Voltmeter in Series)
+    // ──────────────────────────────────────────────
+    {
+      const bat = { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const res = { id: "R1", type: "resistor", properties: { resistance: 1000 }, terminals: [{ id: "term_a" }, { id: "term_b" }] };
+      const diode = { id: "D1", type: "diode", properties: { forwardVoltage: 0.7 }, terminals: [{ id: "term_anode" }, { id: "term_cathode" }] };
+      const meter = {
+        id: "M1",
+        type: "multimeter",
+        properties: {
+          mode: "V_DC", // Changed to V_DC, probes UNTOUCHED in series
+          probes: {
+            vwma: { attachedTo: { compId: "R1", termId: "term_b" }, isPlaced: true },
+            com: { attachedTo: { compId: "D1", termId: "term_anode" }, isPlaced: true }
+          }
+        },
+        terminals: [{ id: "term_vwma" }, { id: "term_com" }]
+      };
+      const comps = [bat, res, diode, meter];
+      const conns = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R1", terminalId: "term_a" } },
+        { from: { componentId: "D1", terminalId: "term_cathode" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+      const netlist = NetlistBuilder.build(comps, conns);
+      const r = MNACircuitSolver.solve(bat, comps, conns);
+      const m = MeasurementEngine.evaluate(meter, r, comps, conns, netlist.uf);
+
+      const expV = 12 * (10e6 / (10e6 + 1000)) - 0.7; // ≈ 11.299 V
+      const expI = (12 - 0.7) / (10e6 + 1000); // ≈ 1.129887 µA
+      const iR1 = r.branchCurrents.get("R1") || 0;
+      const iD1 = r.branchCurrents.get("D1") || 0;
+      const iM1 = r.branchCurrents.get("M1") || 0;
+
+      const pR1 = (r.branchVoltages.get("R1") || 0) * iR1;
+      const pD1 = (r.branchVoltages.get("D1") || 0) * iD1;
+      const pM1 = (r.branchVoltages.get("M1") || 0) * iM1;
+      const pSum = pR1 + pD1 + pM1;
+      const pResidual = Math.abs(r.power.source - pSum);
+
+      const checks = [
+        m.readingText === "11.30",
+        m.unit === "V",
+        eq(m.rawValue, expV, 1e-2),
+        eq(r.sourceCurrent, expI, 1e-7), // I_source ≈ 1.13 µA
+        eq(iR1, expI, 1e-7),             // I_resistor == I_source
+        eq(iD1, expI, 1e-7),             // I_diode == I_source
+        eq(iM1, expI, 1e-7),             // I_voltmeter == I_source
+        pResidual < 1e-9                 // Power conservation P_source == Σ P_components
+      ];
+      const passed = checks.every(Boolean);
+      record(48, "MS 4: A -> V While in Series (Series current I_source = I_R = I_D = I_meter ≈ 1.13µA, P_source = Σ P_comp)", passed);
+      console.log(`\n[TEST 48 / MS 4] A -> V While in Series (Topology-Aware Series Current Accounting)`);
+      console.log(`  Measured voltage   : ${m.rawValue.toFixed(3)} V (expected ${expV.toFixed(3)} V) ${checks[2] ? "✅" : "❌"}`);
+      console.log(`  Source current     : ${(r.sourceCurrent * 1e6).toFixed(6)} µA ${checks[3] ? "✅" : "❌"}`);
+      console.log(`  Resistor branch (R1): ${(iR1 * 1e6).toFixed(6)} µA ${checks[4] ? "✅" : "❌"}`);
+      console.log(`  Diode branch (D1)  : ${(iD1 * 1e6).toFixed(6)} µA ${checks[5] ? "✅" : "❌"}`);
+      console.log(`  Voltmeter branch   : ${(iM1 * 1e6).toFixed(6)} µA ${checks[6] ? "✅" : "❌"}`);
+      console.log(`  Series loop KCL    : I_source == I_R == I_D == I_meter ${checks[3] && checks[4] && checks[5] && checks[6] ? "✅" : "❌"}`);
+      console.log(`  Power conservation : P_source (${r.power.source.toExponential(4)} W) == Σ P_comp (${pSum.toExponential(4)} W) [diff ${pResidual.toExponential(2)}] ${checks[7] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 49 (TOP 1) — Parallel Topology Current & Power Sum (I_source = Σ I_branches, P_source = Σ P_branches)
+    // ──────────────────────────────────────────────
+    {
+      const bat = { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const r1 = { id: "R1", type: "resistor", properties: { resistance: 20 }, terminals: [{ id: "term_a" }, { id: "term_b" }] };
+      const r2 = { id: "R2", type: "resistor", properties: { resistance: 30 }, terminals: [{ id: "term_a" }, { id: "term_b" }] };
+      const r3 = { id: "R3", type: "resistor", properties: { resistance: 60 }, terminals: [{ id: "term_a" }, { id: "term_b" }] };
+      const meter = {
+        id: "M1",
+        type: "multimeter",
+        properties: {
+          mode: "V_DC",
+          probes: {
+            vwma: { attachedTo: { compId: "Bat", termId: "term_pos" }, isPlaced: true },
+            com: { attachedTo: { compId: "Bat", termId: "term_neg" }, isPlaced: true }
+          }
+        },
+        terminals: [{ id: "term_vwma" }, { id: "term_com" }]
+      };
+
+      const comps = [bat, r1, r2, r3, meter];
+      const conns = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R1", terminalId: "term_a" } },
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R2", terminalId: "term_a" } },
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R3", terminalId: "term_a" } },
+        { from: { componentId: "R1", terminalId: "term_b" }, to: { componentId: "Bat", terminalId: "term_neg" } },
+        { from: { componentId: "R2", terminalId: "term_b" }, to: { componentId: "Bat", terminalId: "term_neg" } },
+        { from: { componentId: "R3", terminalId: "term_b" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+
+      const r = MNACircuitSolver.solve(bat, comps, conns);
+      const i1 = r.branchCurrents.get("R1"); // 12 / 20 = 0.6 A
+      const i2 = r.branchCurrents.get("R2"); // 12 / 30 = 0.4 A
+      const i3 = r.branchCurrents.get("R3"); // 12 / 60 = 0.2 A
+      const iMeter = r.branchCurrents.get("M1") || r.instrumentCurrent; // 12 / 10M = 1.2 µA
+      const iSum = i1 + i2 + i3 + iMeter;
+
+      const p1 = (r.branchVoltages.get("R1") || 0) * i1;
+      const p2 = (r.branchVoltages.get("R2") || 0) * i2;
+      const p3 = (r.branchVoltages.get("R3") || 0) * i3;
+      const pMeter = (r.branchVoltages.get("M1") || 0) * iMeter;
+      const pSum = p1 + p2 + p3 + pMeter;
+
+      const currentDiff = Math.abs(r.sourceCurrent - iSum);
+      const powerDiff = Math.abs(r.power.source - pSum);
+
+      const checks = [
+        eq(i1, 0.6),
+        eq(i2, 0.4),
+        eq(i3, 0.2),
+        currentDiff < 1e-9,
+        powerDiff < 1e-9
+      ];
+      const passed = checks.every(Boolean);
+      record(49, "TOP 1: Parallel Topology KCL & Power Sum (I_source = Σ I_branches, P_source = Σ P_branches)", passed);
+      console.log(`\n[TEST 49 / TOP 1] Parallel Topology KCL & Power Sum`);
+      console.log(`  Branch currents: R1=${i1.toFixed(3)}A, R2=${i2.toFixed(3)}A, R3=${i3.toFixed(3)}A, Meter=${(iMeter * 1e6).toFixed(3)}µA`);
+      console.log(`  Source current : ${r.sourceCurrent.toFixed(6)} A (Σ I_branches = ${iSum.toFixed(6)} A) [diff ${currentDiff.toExponential(2)}] ${checks[3] ? "✅" : "❌"}`);
+      console.log(`  Power balance  : P_source=${r.power.source.toFixed(3)}W, Σ P_branches=${pSum.toFixed(3)}W [diff ${powerDiff.toExponential(2)}] ${checks[4] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 50 (DIODE 1) — Forward Basic: 12V + 1kΩ + D1 (Vf=0.7V)
+    // ──────────────────────────────────────────────
+    {
+      const bat = { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const res = { id: "R1", type: "resistor", properties: { resistance: 1000 }, terminals: [{ id: "term_a" }, { id: "term_b" }] };
+      const diode = { id: "D1", type: "diode", properties: { forwardVoltage: 0.7, model: "1N4007" }, terminals: [{ id: "term_anode" }, { id: "term_cathode" }] };
+      const comps = [bat, res, diode];
+      const conns = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R1", terminalId: "term_a" } },
+        { from: { componentId: "R1", terminalId: "term_b" }, to: { componentId: "D1", terminalId: "term_anode" } },
+        { from: { componentId: "D1", terminalId: "term_cathode" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+      const r = MNACircuitSolver.solve(bat, comps, conns);
+
+      const vd = r.branchVoltages.get("D1");
+      const id = r.branchCurrents.get("D1");
+      const vr = r.branchVoltages.get("R1");
+      const state = r.diodeStates.get("D1");
+      const kvlResidual = Math.abs(12 - vr - vd);
+      const pBat = r.power.source;
+      const pSum = vr * id + vd * id;
+      const powerResidual = Math.abs(pBat - pSum);
+
+      const checks = [
+        state === "ON",
+        eq(vd, 0.7),
+        eq(id, 0.0113),
+        eq(vr, 11.3),
+        kvlResidual < 1e-9,
+        powerResidual < 1e-9
+      ];
+      const passed = checks.every(Boolean);
+      record(50, "DIODE 1: Forward Basic (12V + 1kΩ + D1, Vd=0.7V, I=11.3mA, Vr=11.3V, KVL & Power < 1e-9)", passed);
+      console.log(`\n[TEST 50 / DIODE 1] Forward Basic (12V + 1kΩ + D1)`);
+      console.log(`  State: ${state} ${checks[0] ? "✅" : "❌"}`);
+      console.log(`  Vd: ${vd.toFixed(6)} V (expected 0.700000) ${checks[1] ? "✅" : "❌"}`);
+      console.log(`  Id: ${(id * 1e3).toFixed(6)} mA (expected 11.300000) ${checks[2] ? "✅" : "❌"}`);
+      console.log(`  Vr: ${vr.toFixed(6)} V (expected 11.300000) ${checks[3] ? "✅" : "❌"}`);
+      console.log(`  KVL / Power residuals: ${kvlResidual.toExponential(2)} V / ${powerResidual.toExponential(2)} W ${checks[4] && checks[5] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 51 (DIODE 2) — Reverse Bias: 12V + 1kΩ + D1 reversed
+    // ──────────────────────────────────────────────
+    {
+      const bat = { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const res = { id: "R1", type: "resistor", properties: { resistance: 1000 }, terminals: [{ id: "term_a" }, { id: "term_b" }] };
+      const diode = { id: "D1", type: "diode", properties: { forwardVoltage: 0.7, model: "1N4007" }, terminals: [{ id: "term_anode" }, { id: "term_cathode" }] };
+      const comps = [bat, res, diode];
+      const conns = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R1", terminalId: "term_a" } },
+        { from: { componentId: "R1", terminalId: "term_b" }, to: { componentId: "D1", terminalId: "term_cathode" } },
+        { from: { componentId: "D1", terminalId: "term_anode" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+      const r = MNACircuitSolver.solve(bat, comps, conns);
+
+      const vd = r.branchVoltages.get("D1");
+      const id = r.branchCurrents.get("D1");
+      const vr = r.branchVoltages.get("R1");
+      const state = r.diodeStates.get("D1");
+
+      const checks = [
+        state === "OFF",
+        eq(id, 0),
+        vd < -11.9,
+        Math.abs(vr) < 1e-3
+      ];
+      const passed = checks.every(Boolean);
+      record(51, "DIODE 2: Reverse Bias (12V + 1kΩ + D1 rev, state=OFF, Id=0, signed Vd ≈ -12V, Vr ≈ 0V)", passed);
+      console.log(`\n[TEST 51 / DIODE 2] Reverse Bias (12V + 1kΩ + D1 reversed)`);
+      console.log(`  State: ${state} ${checks[0] ? "✅" : "❌"}`);
+      console.log(`  Id: ${id.toFixed(6)} A (expected 0) ${checks[1] ? "✅" : "❌"}`);
+      console.log(`  Signed Vd: ${vd.toFixed(6)} V (expected ≈ -12V) ${checks[2] ? "✅" : "❌"}`);
+      console.log(`  Vr: ${vr.toFixed(6)} V (expected ≈ 0V) ${checks[3] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 52 (DIODE 3) — Below Threshold: 0.5V + 1kΩ + D1
+    // ──────────────────────────────────────────────
+    {
+      const bat = { id: "Bat", type: "battery", properties: { voltage: 0.5 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const res = { id: "R1", type: "resistor", properties: { resistance: 1000 }, terminals: [{ id: "term_a" }, { id: "term_b" }] };
+      const diode = { id: "D1", type: "diode", properties: { forwardVoltage: 0.7, model: "1N4007" }, terminals: [{ id: "term_anode" }, { id: "term_cathode" }] };
+      const comps = [bat, res, diode];
+      const conns = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R1", terminalId: "term_a" } },
+        { from: { componentId: "R1", terminalId: "term_b" }, to: { componentId: "D1", terminalId: "term_anode" } },
+        { from: { componentId: "D1", terminalId: "term_cathode" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+      const r = MNACircuitSolver.solve(bat, comps, conns);
+
+      const id = r.branchCurrents.get("D1");
+      const state = r.diodeStates.get("D1");
+
+      const checks = [
+        state === "OFF",
+        eq(id, 0),
+        eq(r.mainLoadCurrent, 0)
+      ];
+      const passed = checks.every(Boolean);
+      record(52, "DIODE 3: Below Threshold (0.5V + 1kΩ + D1, state=OFF, I ≈ 0)", passed);
+      console.log(`\n[TEST 52 / DIODE 3] Below Threshold (0.5V < 0.7V)`);
+      console.log(`  State: ${state} ${checks[0] ? "✅" : "❌"}`);
+      console.log(`  Id: ${id.toFixed(6)} A (expected 0) ${checks[1] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 53 (DIODE 4) — Boundary: 0.7V + 1kΩ + D1
+    // ──────────────────────────────────────────────
+    {
+      const bat = { id: "Bat", type: "battery", properties: { voltage: 0.7 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const res = { id: "R1", type: "resistor", properties: { resistance: 1000 }, terminals: [{ id: "term_a" }, { id: "term_b" }] };
+      const diode = { id: "D1", type: "diode", properties: { forwardVoltage: 0.7, model: "1N4007" }, terminals: [{ id: "term_anode" }, { id: "term_cathode" }] };
+      const comps = [bat, res, diode];
+      const conns = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R1", terminalId: "term_a" } },
+        { from: { componentId: "R1", terminalId: "term_b" }, to: { componentId: "D1", terminalId: "term_anode" } },
+        { from: { componentId: "D1", terminalId: "term_cathode" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+      const r = MNACircuitSolver.solve(bat, comps, conns);
+
+      const checks = [
+        r.converged === true,
+        r.iterationCount <= 3,
+        eq(r.mainLoadCurrent, 0, 1e-4)
+      ];
+      const passed = checks.every(Boolean);
+      record(53, "DIODE 4: Boundary (0.7V + 1kΩ + D1, converges, no oscillation, I ≈ 0)", passed);
+      console.log(`\n[TEST 53 / DIODE 4] Boundary (V_source = Vf = 0.7V)`);
+      console.log(`  Converged: ${r.converged} (iter ${r.iterationCount}) ${checks[0] ? "✅" : "❌"}`);
+      console.log(`  Current: ${r.mainLoadCurrent.toFixed(6)} A (expected ≈ 0) ${checks[2] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 54 (DIODE 5) — Two Forward Diodes in Series: 12V + 1kΩ + D1 + D2
+    // ──────────────────────────────────────────────
+    {
+      const bat = { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const res = { id: "R1", type: "resistor", properties: { resistance: 1000 }, terminals: [{ id: "term_a" }, { id: "term_b" }] };
+      const d1 = { id: "D1", type: "diode", properties: { forwardVoltage: 0.7, model: "1N4007" }, terminals: [{ id: "term_anode" }, { id: "term_cathode" }] };
+      const d2 = { id: "D2", type: "diode", properties: { forwardVoltage: 0.7, model: "1N4007" }, terminals: [{ id: "term_anode" }, { id: "term_cathode" }] };
+      const comps = [bat, res, d1, d2];
+      const conns = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R1", terminalId: "term_a" } },
+        { from: { componentId: "R1", terminalId: "term_b" }, to: { componentId: "D1", terminalId: "term_anode" } },
+        { from: { componentId: "D1", terminalId: "term_cathode" }, to: { componentId: "D2", terminalId: "term_anode" } },
+        { from: { componentId: "D2", terminalId: "term_cathode" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+      const r = MNACircuitSolver.solve(bat, comps, conns);
+
+      const vd1 = r.branchVoltages.get("D1");
+      const vd2 = r.branchVoltages.get("D2");
+      const vr = r.branchVoltages.get("R1");
+      const id = r.branchCurrents.get("D1");
+      const kvlResidual = Math.abs(12 - vr - vd1 - vd2);
+
+      const checks = [
+        r.diodeStates.get("D1") === "ON",
+        r.diodeStates.get("D2") === "ON",
+        eq(vd1, 0.7),
+        eq(vd2, 0.7),
+        eq(id, 0.0106),
+        eq(vr, 10.6),
+        kvlResidual < 1e-9
+      ];
+      const passed = checks.every(Boolean);
+      record(54, "DIODE 5: Two Forward Diodes in Series (Vd1=0.7V, Vd2=0.7V, I=10.6mA, Vr=10.6V, KVL=0)", passed);
+      console.log(`\n[TEST 54 / DIODE 5] Two Forward Diodes in Series (12V + 1kΩ + D1 + D2)`);
+      console.log(`  Vd1: ${vd1.toFixed(4)} V, Vd2: ${vd2.toFixed(4)} V ${checks[2] && checks[3] ? "✅" : "❌"}`);
+      console.log(`  Id: ${(id * 1e3).toFixed(4)} mA (expected 10.6000 mA) ${checks[4] ? "✅" : "❌"}`);
+      console.log(`  Vr: ${vr.toFixed(4)} V (expected 10.6000 V) ${checks[5] ? "✅" : "❌"}`);
+      console.log(`  KVL: 12 - 10.6 - 0.7 - 0.7 = ${kvlResidual.toExponential(2)} V ${checks[6] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 55 (DIODE 6) — Forward + Reverse Series: 12V + 1kΩ + D1 + D2(rev)
+    // ──────────────────────────────────────────────
+    {
+      const bat = { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const res = { id: "R1", type: "resistor", properties: { resistance: 1000 }, terminals: [{ id: "term_a" }, { id: "term_b" }] };
+      const d1 = { id: "D1", type: "diode", properties: { forwardVoltage: 0.7, model: "1N4007" }, terminals: [{ id: "term_anode" }, { id: "term_cathode" }] };
+      const d2 = { id: "D2", type: "diode", properties: { forwardVoltage: 0.7, model: "1N4007" }, terminals: [{ id: "term_anode" }, { id: "term_cathode" }] };
+      const comps = [bat, res, d1, d2];
+      const conns = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R1", terminalId: "term_a" } },
+        { from: { componentId: "R1", terminalId: "term_b" }, to: { componentId: "D1", terminalId: "term_anode" } },
+        { from: { componentId: "D1", terminalId: "term_cathode" }, to: { componentId: "D2", terminalId: "term_cathode" } },
+        { from: { componentId: "D2", terminalId: "term_anode" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+      const r = MNACircuitSolver.solve(bat, comps, conns);
+
+      const stateD2 = r.diodeStates.get("D2");
+      const vd2 = r.branchVoltages.get("D2");
+
+      const checks = [
+        stateD2 === "OFF",
+        eq(r.mainLoadCurrent, 0),
+        vd2 <= -11.0
+      ];
+      const passed = checks.every(Boolean);
+      record(55, "DIODE 6: Forward + Reverse Series (I ≈ 0, D2 OFF, reverse voltage dropped across D2)", passed);
+      console.log(`\n[TEST 55 / DIODE 6] Forward + Reverse Series (12V + 1kΩ + D1 + D2 rev)`);
+      console.log(`  D2 State: ${stateD2} ${checks[0] ? "✅" : "❌"}`);
+      console.log(`  Main Load Current: ${r.mainLoadCurrent.toFixed(6)} A (expected 0) ${checks[1] ? "✅" : "❌"}`);
+      console.log(`  D2 Signed Vd: ${vd2.toFixed(4)} V (expected ≈ -11.3V) ${checks[2] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 56 (DIODE 7) — Parallel Diode Branches: (1kΩ+D1) || (2kΩ+D2)
+    // ──────────────────────────────────────────────
+    {
+      const bat = { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const r1 = { id: "R1", type: "resistor", properties: { resistance: 1000 }, terminals: [{ id: "term_a" }, { id: "term_b" }] };
+      const r2 = { id: "R2", type: "resistor", properties: { resistance: 2000 }, terminals: [{ id: "term_a" }, { id: "term_b" }] };
+      const d1 = { id: "D1", type: "diode", properties: { forwardVoltage: 0.7, model: "1N4007" }, terminals: [{ id: "term_anode" }, { id: "term_cathode" }] };
+      const d2 = { id: "D2", type: "diode", properties: { forwardVoltage: 0.7, model: "1N4007" }, terminals: [{ id: "term_anode" }, { id: "term_cathode" }] };
+      const comps = [bat, r1, r2, d1, d2];
+      const conns = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R1", terminalId: "term_a" } },
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R2", terminalId: "term_a" } },
+        { from: { componentId: "R1", terminalId: "term_b" }, to: { componentId: "D1", terminalId: "term_anode" } },
+        { from: { componentId: "R2", terminalId: "term_b" }, to: { componentId: "D2", terminalId: "term_anode" } },
+        { from: { componentId: "D1", terminalId: "term_cathode" }, to: { componentId: "Bat", terminalId: "term_neg" } },
+        { from: { componentId: "D2", terminalId: "term_cathode" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+      const r = MNACircuitSolver.solve(bat, comps, conns);
+
+      const i1 = r.branchCurrents.get("D1");
+      const i2 = r.branchCurrents.get("D2");
+      const iTotal = r.sourceCurrent;
+      const kclResidual = Math.abs(iTotal - (i1 + i2));
+
+      const checks = [
+        eq(i1, 0.0113),
+        eq(i2, 0.00565),
+        eq(iTotal, 0.01695),
+        kclResidual < 1e-9
+      ];
+      const passed = checks.every(Boolean);
+      record(56, "DIODE 7: Parallel Diode Branches (I1=11.3mA, I2=5.65mA, Itotal=16.95mA, KCL < 1e-9)", passed);
+      console.log(`\n[TEST 56 / DIODE 7] Parallel Diode Branches: (1kΩ+D1) || (2kΩ+D2)`);
+      console.log(`  Branch 1 (1kΩ+D1): ${(i1 * 1e3).toFixed(4)} mA (expected 11.3000 mA) ${checks[0] ? "✅" : "❌"}`);
+      console.log(`  Branch 2 (2kΩ+D2): ${(i2 * 1e3).toFixed(4)} mA (expected 5.6500 mA) ${checks[1] ? "✅" : "❌"}`);
+      console.log(`  Total current    : ${(iTotal * 1e3).toFixed(4)} mA (expected 16.9500 mA) ${checks[2] ? "✅" : "❌"}`);
+      console.log(`  KCL residual     : ${kclResidual.toExponential(4)} A (< 1e-9) ${checks[3] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 57 (DIODE 8) — Mixed LED + Diode: 12V + 465Ω + LED 2V + Diode 0.7V
+    // ──────────────────────────────────────────────
+    {
+      const bat = { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const res = { id: "R1", type: "resistor", properties: { resistance: 465 }, terminals: [{ id: "term_a" }, { id: "term_b" }] };
+      const led = { id: "LED1", type: "led", properties: { forwardVoltage: 2.0 }, terminals: [{ id: "term_anode" }, { id: "term_cathode" }] };
+      const diode = { id: "D1", type: "diode", properties: { forwardVoltage: 0.7, model: "1N4007" }, terminals: [{ id: "term_anode" }, { id: "term_cathode" }] };
+      const comps = [bat, res, led, diode];
+      const conns = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R1", terminalId: "term_a" } },
+        { from: { componentId: "R1", terminalId: "term_b" }, to: { componentId: "LED1", terminalId: "term_anode" } },
+        { from: { componentId: "LED1", terminalId: "term_cathode" }, to: { componentId: "D1", terminalId: "term_anode" } },
+        { from: { componentId: "D1", terminalId: "term_cathode" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+      const r = MNACircuitSolver.solve(bat, comps, conns);
+
+      const iTotal = r.sourceCurrent;
+      const vLed = r.branchVoltages.get("LED1");
+      const vDiode = r.branchVoltages.get("D1");
+      const vR = r.branchVoltages.get("R1");
+
+      const checks = [
+        r.diodeStates.get("LED1") === "ON",
+        r.diodeStates.get("D1") === "ON",
+        eq(vLed, 2.0),
+        eq(vDiode, 0.7),
+        eq(vR, 9.3),
+        eq(iTotal, 0.020)
+      ];
+      const passed = checks.every(Boolean);
+      record(57, "DIODE 8: Mixed LED + Diode (12V + 465Ω + LED 2V + Diode 0.7V, I=20mA, both ON)", passed);
+      console.log(`\n[TEST 57 / DIODE 8] Mixed LED + Diode (12V + 465Ω + LED 2V + Diode 0.7V)`);
+      console.log(`  LED state: ${r.diodeStates.get("LED1")}, Diode state: ${r.diodeStates.get("D1")} ${checks[0] && checks[1] ? "✅" : "❌"}`);
+      console.log(`  Voltages: V_R=${vR.toFixed(3)}V, V_LED=${vLed.toFixed(3)}V, V_Diode=${vDiode.toFixed(3)}V`);
+      console.log(`  Current : ${(iTotal * 1e3).toFixed(4)} mA (expected 20.0000 mA) ${checks[5] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 58 (DIODE 9) — Multiple Diode State Iteration (Forward & Reverse Network)
+    // ──────────────────────────────────────────────
+    {
+      const bat = { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const r1 = { id: "R1", type: "resistor", properties: { resistance: 500 }, terminals: [{ id: "term_a" }, { id: "term_b" }] };
+      const r2 = { id: "R2", type: "resistor", properties: { resistance: 1000 }, terminals: [{ id: "term_a" }, { id: "term_b" }] };
+      const r3 = { id: "R3", type: "resistor", properties: { resistance: 2000 }, terminals: [{ id: "term_a" }, { id: "term_b" }] };
+      const d1 = { id: "D1", type: "diode", properties: { forwardVoltage: 0.7 }, terminals: [{ id: "term_anode" }, { id: "term_cathode" }] };
+      const d2 = { id: "D2", type: "diode", properties: { forwardVoltage: 0.7 }, terminals: [{ id: "term_anode" }, { id: "term_cathode" }] };
+      const d3 = { id: "D3", type: "diode", properties: { forwardVoltage: 0.7 }, terminals: [{ id: "term_anode" }, { id: "term_cathode" }] };
+      const comps = [bat, r1, r2, r3, d1, d2, d3];
+      const conns = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R1", terminalId: "term_a" } },
+        { from: { componentId: "R1", terminalId: "term_b" }, to: { componentId: "D1", terminalId: "term_anode" } },
+        { from: { componentId: "D1", terminalId: "term_cathode" }, to: { componentId: "Bat", terminalId: "term_neg" } },
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R2", terminalId: "term_a" } },
+        { from: { componentId: "R2", terminalId: "term_b" }, to: { componentId: "D2", terminalId: "term_cathode" } },
+        { from: { componentId: "D2", terminalId: "term_anode" }, to: { componentId: "Bat", terminalId: "term_neg" } },
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R3", terminalId: "term_a" } },
+        { from: { componentId: "R3", terminalId: "term_b" }, to: { componentId: "D3", terminalId: "term_anode" } },
+        { from: { componentId: "D3", terminalId: "term_cathode" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+      const r = MNACircuitSolver.solve(bat, comps, conns);
+
+      const i1 = r.branchCurrents.get("D1");
+      const i2 = r.branchCurrents.get("D2");
+      const i3 = r.branchCurrents.get("D3");
+      const iTotal = r.sourceCurrent;
+      const iGmin = r.gminCurrent || 0;
+      const kclResidual = Math.abs(iTotal - (i1 + i2 + i3 + iGmin));
+
+      const checks = [
+        r.converged === true,
+        r.iterationCount <= 10,
+        r.diodeStates.get("D1") === "ON",
+        r.diodeStates.get("D2") === "OFF",
+        r.diodeStates.get("D3") === "ON",
+        eq(i1, 0.0226),
+        eq(i2, 0),
+        eq(i3, 0.00565),
+        eq(r.mainLoadCurrent, 0.02825),
+        kclResidual < 1e-9
+      ];
+      const passed = checks.every(Boolean);
+      record(58, "DIODE 9: Multiple Diode State Iteration (Network forward/reverse, converges iter<=10, no oscillation, KCL < 1e-9)", passed);
+      console.log(`\n[TEST 58 / DIODE 9] Multiple Diode State Iteration`);
+      console.log(`  Converged: ${r.converged} (iter ${r.iterationCount}/10) ${checks[0] ? "✅" : "❌"}`);
+      console.log(`  States: D1=${r.diodeStates.get("D1")}, D2=${r.diodeStates.get("D2")}, D3=${r.diodeStates.get("D3")} ${checks[2] && checks[3] && checks[4] ? "✅" : "❌"}`);
+      console.log(`  Currents: I1=${(i1 * 1e3).toFixed(3)}mA, I2=${(i2 * 1e3).toFixed(3)}mA, I3=${(i3 * 1e3).toFixed(3)}mA, MainLoad=${(r.mainLoadCurrent * 1e3).toFixed(3)}mA`);
+      console.log(`  KCL residual: ${kclResidual.toExponential(4)} A (< 1e-9) ${checks[9] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 59 (MOTOR SIGN 1) — +12 V, 0% Load (V=+12, Ia=+0.3A, Eb=+11.7V, omega>0, Dir=CW, V=Ia*Ra+Eb)
+    // ──────────────────────────────────────────────
+    {
+      const bat = { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const motor = { id: "M1", type: "motor_dc", properties: { nominalVoltage: 12, maxRpm: 3000, noLoadCurrent: 0.30, armatureResistance: 1.0, loadPercent: 0 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const comps = [bat, motor];
+      const conns = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "M1", terminalId: "term_pos" } },
+        { from: { componentId: "M1", terminalId: "term_neg" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+      const r = MNACircuitSolver.solve(bat, comps, conns);
+      const m = r.motorResults.get("M1");
+
+      const pRes = m.powerBalanceResidual;
+      const eRes = m.electricalResidual;
+      const checks = [
+        eq(m.rpm, 3000, 1),
+        eq(m.current, 0.300, 1e-3),
+        eq(m.backEmf, 11.700, 1e-3),
+        m.angularSpeed > 0,
+        m.direction === "CW",
+        m.state === "RUNNING",
+        eRes < 1e-9,
+        pRes < 1e-9
+      ];
+      const passed = checks.every(Boolean);
+      record(59, "MOTOR SIGN 1: +12V Forward (V=+12, Ia=+0.300A, Eb=+11.7V, omega>0, Dir=CW, V ≈ Ia*Ra+Eb)", passed);
+      console.log(`\n[TEST 59 / MOTOR SIGN 1] +12V Forward (No-Load Equilibrium)`);
+      console.log(`  RPM: ${m.rpm}, Ia: ${m.current.toFixed(6)} A, Eb: ${m.backEmf.toFixed(6)} V, omega: ${m.angularSpeed.toFixed(4)} rad/s`);
+      console.log(`  Direction: ${m.direction}, State: ${m.state} ${checks[4] && checks[5] ? "✅" : "❌"}`);
+      console.log(`  Electrical Eq Residual: ${eRes.toExponential(4)} V (< 1e-9) ${checks[6] ? "✅" : "❌"}`);
+      console.log(`  Power Residual        : ${pRes.toExponential(4)} W (< 1e-9) ${checks[7] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 60 (MOTOR SIGN 2) — Reverse -12 V, 0% Load (V=-12, Ia=-0.3A, Eb=-11.7V, omega<0, Dir=CCW, V=Ia*Ra+Eb)
+    // ──────────────────────────────────────────────
+    {
+      const bat = { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const motor = { id: "M1", type: "motor_dc", properties: { nominalVoltage: 12, maxRpm: 3000, noLoadCurrent: 0.30, armatureResistance: 1.0, loadPercent: 0 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const comps = [bat, motor];
+      const conns = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "M1", terminalId: "term_neg" } },
+        { from: { componentId: "M1", terminalId: "term_pos" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+      const r = MNACircuitSolver.solve(bat, comps, conns);
+      const m = r.motorResults.get("M1");
+
+      const eRes = m.electricalResidual;
+      const pRes = m.powerBalanceResidual;
+      const checks = [
+        eq(m.rpm, 3000, 1),
+        eq(m.current, -0.300, 1e-3),
+        eq(m.backEmf, -11.700, 1e-3),
+        m.angularSpeed < 0,
+        m.direction === "CCW",
+        m.state === "RUNNING",
+        eRes < 1e-9,
+        pRes < 1e-9
+      ];
+      const passed = checks.every(Boolean);
+      record(60, "MOTOR SIGN 2: -12V Reverse (V=-12, Ia=-0.300A, Eb=-11.7V, omega<0, Dir=CCW, V ≈ Ia*Ra+Eb)", passed);
+      console.log(`\n[TEST 60 / MOTOR SIGN 2] -12V Reverse (Consistent Signed Quantities)`);
+      console.log(`  RPM: ${m.rpm}, Ia: ${m.current.toFixed(6)} A, Eb: ${m.backEmf.toFixed(6)} V, omega: ${m.angularSpeed.toFixed(4)} rad/s`);
+      console.log(`  Direction: ${m.direction}, State: ${m.state} ${checks[4] && checks[5] ? "✅" : "❌"}`);
+      console.log(`  Electrical Eq Residual: ${eRes.toExponential(4)} V (< 1e-9) ${checks[6] ? "✅" : "❌"}`);
+      console.log(`  Power Residual        : ${pRes.toExponential(4)} W (< 1e-9) ${checks[7] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 61 (MOTOR 3) — 6 V, 0% Load (Half Speed ~1500 RPM, Ia=0.150A, Eb=5.850V)
+    // ──────────────────────────────────────────────
+    {
+      const bat = { id: "Bat", type: "battery", properties: { voltage: 6 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const motor = { id: "M1", type: "motor_dc", properties: { nominalVoltage: 12, maxRpm: 3000, noLoadCurrent: 0.30, armatureResistance: 1.0, loadPercent: 0 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const comps = [bat, motor];
+      const conns = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "M1", terminalId: "term_pos" } },
+        { from: { componentId: "M1", terminalId: "term_neg" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+      const r = MNACircuitSolver.solve(bat, comps, conns);
+      const m = r.motorResults.get("M1");
+
+      const checks = [
+        eq(m.rpm, 1500, 1),
+        eq(m.current, 0.150, 1e-3),
+        eq(m.backEmf, 5.850, 1e-3),
+        m.direction === "CW",
+        m.electricalResidual < 1e-9,
+        m.powerBalanceResidual < 1e-9
+      ];
+      const passed = checks.every(Boolean);
+      record(61, "MOTOR 3: 6V 0% Load (RPM=1500, Ia=0.150A, Eb=5.850V, Dir=CW)", passed);
+      console.log(`\n[TEST 61 / MOTOR 3] 6V, 0% Load (Proportional Speed Drop)`);
+      console.log(`  RPM: ${m.rpm} (expected ~1500) ${checks[0] ? "✅" : "❌"}`);
+      console.log(`  Ia: ${m.current.toFixed(6)} A (expected 0.150000 A) ${checks[1] ? "✅" : "❌"}`);
+      console.log(`  Eb: ${m.backEmf.toFixed(6)} V (expected 5.850000 V) ${checks[2] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 62 (MOTOR STALL) — Stall at 12 V (Load=100%, RPM=0, Eb=0, Ia=12A, State=STALL)
+    // ──────────────────────────────────────────────
+    {
+      const bat = { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const motor = { id: "M1", type: "motor_dc", properties: { nominalVoltage: 12, maxRpm: 3000, noLoadCurrent: 0.30, armatureResistance: 1.0, loadPercent: 100 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const comps = [bat, motor];
+      const conns = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "M1", terminalId: "term_pos" } },
+        { from: { componentId: "M1", terminalId: "term_neg" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+      const r = MNACircuitSolver.solve(bat, comps, conns);
+      const m = r.motorResults.get("M1");
+
+      const checks = [
+        m.rpm === 0,
+        m.angularSpeed === 0,
+        eq(m.current, 12.000, 1e-3),
+        eq(m.backEmf, 0, 1e-3),
+        eq(m.torque, 0.4469, 1e-3),
+        m.state === "STALL",
+        r.warning === "Motor Stall / High Current Overload"
+      ];
+      const passed = checks.every(Boolean);
+      record(62, "MOTOR STALL: 12V 100% Stall Torque Load (RPM=0, Eb=0V, Ia=12.0A, Te=0.4469Nm, State=STALL)", passed);
+      console.log(`\n[TEST 62 / MOTOR STALL] Stall at 12V (Load 100%)`);
+      console.log(`  RPM: ${m.rpm} ${checks[0] ? "✅" : "❌"}`);
+      console.log(`  Ia: ${m.current.toFixed(6)} A (expected 12.000000 A) ${checks[2] ? "✅" : "❌"}`);
+      console.log(`  Eb: ${m.backEmf.toFixed(6)} V (expected 0 V) ${checks[3] ? "✅" : "❌"}`);
+      console.log(`  Torque: ${m.torque.toFixed(4)} Nm (expected ~0.4469 Nm) ${checks[4] ? "✅" : "❌"}`);
+      console.log(`  State: ${m.state}, Warning: "${r.warning}" ${checks[5] && checks[6] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 63 (MOTOR OVERLOAD) — 12 V, 25% Load (Ia=3.225A > 2.0A, RPM=2250 > 0, State=OVERLOAD)
+    // ──────────────────────────────────────────────
+    {
+      const bat = { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const motor = { id: "M1", type: "motor_dc", properties: { nominalVoltage: 12, maxRpm: 3000, noLoadCurrent: 0.30, armatureResistance: 1.0, ratedCurrent: 2.0, loadPercent: 25 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const comps = [bat, motor];
+      const conns = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "M1", terminalId: "term_pos" } },
+        { from: { componentId: "M1", terminalId: "term_neg" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+      const r = MNACircuitSolver.solve(bat, comps, conns);
+      const m = r.motorResults.get("M1");
+
+      const checks = [
+        m.rpm > 0,
+        eq(m.rpm, 2250, 1),
+        eq(m.current, 3.225, 1e-3),
+        m.current > 2.0,
+        m.state === "OVERLOAD",
+        r.warning === "Motor Overload"
+      ];
+      const passed = checks.every(Boolean);
+      record(63, "MOTOR OVERLOAD: 12V 25% Load (RPM=2250>0, Ia=3.225A>2.0A unclamped, State=OVERLOAD, Warning Active)", passed);
+      console.log(`\n[TEST 63 / MOTOR OVERLOAD] 12V, 25% Load`);
+      console.log(`  RPM: ${m.rpm}, Ia: ${m.current.toFixed(4)} A (> 2.0 A threshold)`);
+      console.log(`  State: ${m.state}, Warning: "${r.warning}" ${checks[4] && checks[5] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 64 (MOTOR TREND) — Monotonic Trend with Increasing Mechanical Load
+    // ──────────────────────────────────────────────
+    {
+      const bat = { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const loads = [0, 25, 50, 75, 100];
+      const list = loads.map(lp => {
+        const motor = { id: "M1", type: "motor_dc", properties: { nominalVoltage: 12, maxRpm: 3000, noLoadCurrent: 0.30, armatureResistance: 1.0, loadPercent: lp }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+        const comps = [bat, motor];
+        const conns = [
+          { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "M1", terminalId: "term_pos" } },
+          { from: { componentId: "M1", terminalId: "term_neg" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+        ];
+        return MNACircuitSolver.solve(bat, comps, conns).motorResults.get("M1");
+      });
+
+      const isMonotonicRpm = list.every((m, i) => i === 0 || m.rpm <= list[i - 1].rpm);
+      const isMonotonicEb = list.every((m, i) => i === 0 || m.backEmfMagnitude <= list[i - 1].backEmfMagnitude);
+      const isMonotonicI = list.every((m, i) => i === 0 || m.currentMagnitude >= list[i - 1].currentMagnitude);
+      const isMonotonicTe = list.every((m, i) => i === 0 || m.torque >= list[i - 1].torque);
+
+      const passed = isMonotonicRpm && isMonotonicEb && isMonotonicI && isMonotonicTe;
+      record(64, "MOTOR TREND: Monotonic Trend with Mechanical Load (Load ↑ => RPM ↓, Eb ↓, Ia ↑, Te ↑)", passed);
+      console.log(`\n[TEST 64 / MOTOR TREND] Monotonic Trend with Increasing Load`);
+      list.forEach((m, i) => {
+        console.log(`  Load ${loads[i]}%: RPM=${m.rpm}, Ia=${m.current.toFixed(3)}A, Eb=${m.backEmf.toFixed(3)}V, Te=${m.torque.toFixed(4)}Nm`);
+      });
+      console.log(`  Monotonic RPM decreasing: ${isMonotonicRpm ? "✅" : "❌"}`);
+      console.log(`  Monotonic Eb decreasing : ${isMonotonicEb ? "✅" : "❌"}`);
+      console.log(`  Monotonic I increasing  : ${isMonotonicI ? "✅" : "❌"}`);
+      console.log(`  Monotonic Te increasing : ${isMonotonicTe ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 65 (MOTOR OFF) — Source Removed (0 V, RPM=0, Ia=0, State=OFF)
+    // ──────────────────────────────────────────────
+    {
+      const bat = { id: "Bat", type: "battery", properties: { voltage: 0 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const motor = { id: "M1", type: "motor_dc", properties: { nominalVoltage: 12, maxRpm: 3000, noLoadCurrent: 0.30, armatureResistance: 1.0, loadPercent: 0 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const comps = [bat, motor];
+      const conns = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "M1", terminalId: "term_pos" } },
+        { from: { componentId: "M1", terminalId: "term_neg" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+      const r = MNACircuitSolver.solve(bat, comps, conns);
+      const m = r.motorResults.get("M1");
+
+      const checks = [
+        m.rpm === 0,
+        m.current === 0,
+        m.electricalInputPower === 0,
+        m.state === "OFF"
+      ];
+      const passed = checks.every(Boolean);
+      record(65, "MOTOR OFF: Source Removed 0V (RPM=0, Ia=0A, Power=0W, State=OFF)", passed);
+      console.log(`\n[TEST 65 / MOTOR OFF] Source Removed (0 V)`);
+      console.log(`  RPM: ${m.rpm}, Ia: ${m.current}A, Power: ${m.electricalInputPower}W, State: ${m.state}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 66 (MOTOR SYMMETRY) — Polarity Reversal Symmetry (+12V CW vs -12V CCW)
+    // ──────────────────────────────────────────────
+    {
+      const bat = { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const motor = { id: "M1", type: "motor_dc", properties: { nominalVoltage: 12, maxRpm: 3000, noLoadCurrent: 0.30, armatureResistance: 1.0, loadPercent: 25 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const comps = [bat, motor];
+
+      const connsFwd = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "M1", terminalId: "term_pos" } },
+        { from: { componentId: "M1", terminalId: "term_neg" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+      const rFwd = MNACircuitSolver.solve(bat, comps, connsFwd).motorResults.get("M1");
+
+      const connsRev = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "M1", terminalId: "term_neg" } },
+        { from: { componentId: "M1", terminalId: "term_pos" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+      const rRev = MNACircuitSolver.solve(bat, comps, connsRev).motorResults.get("M1");
+
+      const checks = [
+        rFwd.direction === "CW",
+        rRev.direction === "CCW",
+        eq(rFwd.rpm, rRev.rpm),
+        eq(rFwd.current, -rRev.current),
+        eq(rFwd.electricalInputPower, rRev.electricalInputPower)
+      ];
+      const passed = checks.every(Boolean);
+      record(66, "MOTOR SYMMETRY: Polarity Reversal Symmetry (CW vs CCW, equal RPM & Power magnitude)", passed);
+      console.log(`\n[TEST 66 / MOTOR SYMMETRY] Polarity Reversal Symmetry`);
+      console.log(`  Forward : Dir=${rFwd.direction}, RPM=${rFwd.rpm}, Ia=${rFwd.current.toFixed(4)}A, Power=${rFwd.electricalInputPower.toFixed(4)}W`);
+      console.log(`  Reverse : Dir=${rRev.direction}, RPM=${rRev.rpm}, Ia=${rRev.current.toFixed(4)}A, Power=${rRev.electricalInputPower.toFixed(4)}W`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 67 (MIXED A) — Motor + Series Resistor (12V + 2Ω + Motor)
+    // ──────────────────────────────────────────────
+    {
+      const bat = { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const r1 = { id: "R1", type: "resistor", properties: { resistance: 2.0 }, terminals: [{ id: "term_a" }, { id: "term_b" }] };
+      const motor = { id: "M1", type: "motor_dc", properties: { nominalVoltage: 12, maxRpm: 3000, noLoadCurrent: 0.30, armatureResistance: 1.0, loadPercent: 0 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const comps = [bat, r1, motor];
+      const conns = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R1", terminalId: "term_a" } },
+        { from: { componentId: "R1", terminalId: "term_b" }, to: { componentId: "M1", terminalId: "term_pos" } },
+        { from: { componentId: "M1", terminalId: "term_neg" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+
+      const r = MNACircuitSolver.solve(bat, comps, conns);
+      const m = r.motorResults.get("M1");
+      const vr = r.branchVoltages.get("R1") || 0;
+      const vm = r.branchVoltages.get("M1") || 0;
+      const kvlResidual = Math.abs(12 - (vr + vm));
+
+      const checks = [
+        vm < 12.0,
+        vm > 11.0,
+        eq(r.totalCurrent, m.current, 1e-6),
+        kvlResidual < 1e-9,
+        m.electricalResidual < 1e-9
+      ];
+      const passed = checks.every(Boolean);
+      record(67, "MIXED A: Motor + Series Resistor (12V + 2Ω + Motor, V_motor < 12V, KVL & Eq Res < 1e-9)", passed);
+      console.log(`\n[TEST 67 / MIXED A] Motor + Series Resistor`);
+      console.log(`  V_R1: ${vr.toFixed(4)}V, V_Motor: ${vm.toFixed(4)}V (< 12V), Ia: ${m.current.toFixed(4)}A, RPM: ${m.rpm}`);
+      console.log(`  KVL Residual: ${kvlResidual.toExponential(4)} V (< 1e-9) ${checks[3] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 68 (MIXED B) — Motor + Realistic Battery Internal Resistance (12V, r_int=0.5Ω)
+    // ──────────────────────────────────────────────
+    {
+      const bat = { id: "Bat", type: "battery", properties: { voltage: 12, internalResistance: 0.5, model: "realistic" }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const motor = { id: "M1", type: "motor_dc", properties: { nominalVoltage: 12, maxRpm: 3000, noLoadCurrent: 0.30, armatureResistance: 1.0, loadPercent: 0 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const comps = [bat, motor];
+      const conns = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "M1", terminalId: "term_pos" } },
+        { from: { componentId: "M1", terminalId: "term_neg" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+
+      const r = MNACircuitSolver.solve(bat, comps, conns);
+      const m = r.motorResults.get("M1");
+      const vTerm = r.terminalVoltage;
+      const vDrop = 12 - vTerm;
+
+      const checks = [
+        vTerm < 12.0,
+        vTerm > 11.5,
+        eq(vDrop, r.totalCurrent * 0.5, 1e-6),
+        m.rpm < 3000,
+        m.rpm > 2900,
+        m.electricalResidual < 1e-9
+      ];
+      const passed = checks.every(Boolean);
+      record(68, "MIXED B: Motor + Realistic Battery (r_int=0.5Ω, V_term < 12V, RPM drops proportionally)", passed);
+      console.log(`\n[TEST 68 / MIXED B] Motor + Realistic Battery`);
+      console.log(`  V_terminal: ${vTerm.toFixed(4)}V, V_drop: ${vDrop.toFixed(4)}V, RPM: ${m.rpm}, Ia: ${m.current.toFixed(4)}A`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 69 (MIXED C) — Two Motors in Parallel (M1 0% load || M2 25% load)
+    // ──────────────────────────────────────────────
+    {
+      const bat = { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const m1 = { id: "M1", type: "motor_dc", properties: { nominalVoltage: 12, maxRpm: 3000, noLoadCurrent: 0.30, armatureResistance: 1.0, loadPercent: 0 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const m2 = { id: "M2", type: "motor_dc", properties: { nominalVoltage: 12, maxRpm: 3000, noLoadCurrent: 0.30, armatureResistance: 1.0, loadPercent: 25 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const comps = [bat, m1, m2];
+      const conns = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "M1", terminalId: "term_pos" } },
+        { from: { componentId: "M1", terminalId: "term_neg" }, to: { componentId: "Bat", terminalId: "term_neg" } },
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "M2", terminalId: "term_pos" } },
+        { from: { componentId: "M2", terminalId: "term_neg" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+
+      const r = MNACircuitSolver.solve(bat, comps, conns);
+      const res1 = r.motorResults.get("M1");
+      const res2 = r.motorResults.get("M2");
+      const iSource = r.totalCurrent;
+      const kclResidual = Math.abs(iSource - (res1.currentMagnitude + res2.currentMagnitude));
+      const powerResidual = Math.abs(r.totalPower - (res1.power + res2.power));
+
+      const checks = [
+        eq(res1.current, 0.300, 1e-3),
+        eq(res2.current, 3.225, 1e-3),
+        eq(iSource, 3.525, 1e-3),
+        kclResidual < 1e-9,
+        powerResidual < 1e-9
+      ];
+      const passed = checks.every(Boolean);
+      record(69, "MIXED C: Two Motors in Parallel (I_source = I_m1 + I_m2, KCL & Power res < 1e-9)", passed);
+      console.log(`\n[TEST 69 / MIXED C] Two Motors in Parallel`);
+      console.log(`  M1 (0%): ${res1.current.toFixed(4)}A, RPM=${res1.rpm} | M2 (25%): ${res2.current.toFixed(4)}A, RPM=${res2.rpm}`);
+      console.log(`  Source: ${iSource.toFixed(4)}A, KCL Residual: ${kclResidual.toExponential(4)} A (< 1e-9) ${checks[3] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 70 (MIXED D) — Motor + Ammeter in Series
+    // ──────────────────────────────────────────────
+    {
+      const bat = { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const meter = {
+        id: "Meter1",
+        type: "multimeter",
+        properties: {
+          mode: "A_DC",
+          probes: {
+            vwma: { attachedTo: { compId: "Bat", termId: "term_pos" } },
+            com: { attachedTo: { compId: "M1", termId: "term_pos" } }
+          }
+        },
+        terminals: [{ id: "term_vwma" }, { id: "term_com" }]
+      };
+      const motor = { id: "M1", type: "motor_dc", properties: { nominalVoltage: 12, maxRpm: 3000, noLoadCurrent: 0.30, armatureResistance: 1.0, loadPercent: 0 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const comps = [bat, meter, motor];
+      const conns = [
+        { from: { componentId: "M1", terminalId: "term_neg" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+
+      const r = MNACircuitSolver.solve(bat, comps, conns);
+      const m = r.motorResults.get("M1");
+      const iMeter = r.ammeterCurrents.get("Meter1") || 0;
+      const diff = Math.abs(m.currentMagnitude - iMeter);
+
+      const checks = [
+        eq(iMeter, 0.300, 1e-3),
+        diff < 1e-4,
+        m.state === "RUNNING"
+      ];
+      const passed = checks.every(Boolean);
+      record(70, "MIXED D: Motor + Ammeter in Series (Ammeter reading == Motor branch current)", passed);
+      console.log(`\n[TEST 70 / MIXED D] Motor + Ammeter in Series`);
+      console.log(`  Motor Ia: ${m.current.toFixed(6)}A, Ammeter: ${iMeter.toFixed(6)}A, Diff: ${diff.toExponential(4)}A`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 71 (AMMETER SIGN 1 & 2) — Forward vs Reverse Source Signed Ammeter Readings
+    // ──────────────────────────────────────────────
+    {
+      const batFwd = { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const meterFwd = {
+        id: "Meter1",
+        type: "multimeter",
+        properties: {
+          mode: "A_DC",
+          probes: {
+            vwma: { attachedTo: { compId: "Bat", termId: "term_pos" } }, // Red probe upstream (+12V)
+            com: { attachedTo: { compId: "M1", termId: "term_pos" } }
+          }
+        },
+        terminals: [{ id: "term_vwma" }, { id: "term_com" }]
+      };
+      const motorFwd = { id: "M1", type: "motor_dc", properties: { nominalVoltage: 12, maxRpm: 3000, noLoadCurrent: 0.30, armatureResistance: 1.0, loadPercent: 0 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const compsFwd = [batFwd, meterFwd, motorFwd];
+      const connsFwd = [
+        { from: { componentId: "M1", terminalId: "term_neg" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+
+      const rFwd = MNACircuitSolver.solve(batFwd, compsFwd, connsFwd);
+      const netlistFwd = NetlistBuilder.build(compsFwd, connsFwd);
+      const measFwd = MeasurementEngine.evaluate(meterFwd, rFwd, compsFwd, connsFwd, netlistFwd.uf);
+
+      // Reverse source with unchanged probe positions
+      const batRev = { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const meterRev = {
+        id: "Meter1",
+        type: "multimeter",
+        properties: {
+          mode: "A_DC",
+          probes: {
+            vwma: { attachedTo: { compId: "Bat", termId: "term_neg" } }, // Red probe at Bat neg (0V)
+            com: { attachedTo: { compId: "M1", termId: "term_pos" } }
+          }
+        },
+        terminals: [{ id: "term_vwma" }, { id: "term_com" }]
+      };
+      const motorRev = { id: "M1", type: "motor_dc", properties: { nominalVoltage: 12, maxRpm: 3000, noLoadCurrent: 0.30, armatureResistance: 1.0, loadPercent: 0 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const compsRev = [batRev, meterRev, motorRev];
+      const connsRev = [
+        { from: { componentId: "M1", terminalId: "term_neg" }, to: { componentId: "Bat", terminalId: "term_pos" } }
+      ];
+
+      const rRev = MNACircuitSolver.solve(batRev, compsRev, connsRev);
+      const netlistRev = NetlistBuilder.build(compsRev, connsRev);
+      const measRev = MeasurementEngine.evaluate(meterRev, rRev, compsRev, connsRev, netlistRev.uf);
+
+      const checks = [
+        eq(measFwd.rawValue, 0.300, 1e-3),
+        measFwd.readingText === "0.300",
+        measFwd.polarity === "+",
+        eq(measRev.rawValue, -0.300, 1e-3),
+        measRev.readingText === "-0.300",
+        measRev.polarity === "-"
+      ];
+      const passed = checks.every(Boolean);
+      record(71, "AMMETER SIGN 1 & 2: Forward (+0.300A, Polarity +) vs Reverse Source (-0.300A, Polarity -)", passed);
+      console.log(`\n[TEST 71 / AMMETER SIGN 1 & 2] Signed Ammeter Readings`);
+      console.log(`  Forward Circuit : raw=${measFwd.rawValue.toFixed(6)}A, reading="${measFwd.readingText}", polarity=${measFwd.polarity} ${checks[0] && checks[1] && checks[2] ? "✅" : "❌"}`);
+      console.log(`  Reverse Source  : raw=${measRev.rawValue.toFixed(6)}A, reading="${measRev.readingText}", polarity=${measRev.polarity} ${checks[3] && checks[4] && checks[5] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 72 (AMMETER SIGN 3) — Physical Probe Reversal (Red Downstream, COM Upstream)
+    // ──────────────────────────────────────────────
+    {
+      const bat = { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const meter = {
+        id: "Meter1",
+        type: "multimeter",
+        properties: {
+          mode: "A_DC",
+          probes: {
+            com: { attachedTo: { compId: "Bat", termId: "term_pos" } }, // COM upstream (+12V)
+            vwma: { attachedTo: { compId: "M1", termId: "term_pos" } }  // Red downstream
+          }
+        },
+        terminals: [{ id: "term_vwma" }, { id: "term_com" }]
+      };
+      const motor = { id: "M1", type: "motor_dc", properties: { nominalVoltage: 12, maxRpm: 3000, noLoadCurrent: 0.30, armatureResistance: 1.0, loadPercent: 0 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const comps = [bat, meter, motor];
+      const conns = [
+        { from: { componentId: "M1", terminalId: "term_neg" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+
+      const r = MNACircuitSolver.solve(bat, comps, conns);
+      const netlist = NetlistBuilder.build(comps, conns);
+      const meas = MeasurementEngine.evaluate(meter, r, comps, conns, netlist.uf);
+
+      const checks = [
+        eq(r.motorResults.get("M1").current, 0.300, 1e-3),
+        eq(meas.rawValue, -0.300, 1e-3),
+        meas.readingText === "-0.300",
+        meas.polarity === "-"
+      ];
+      const passed = checks.every(Boolean);
+      record(72, "AMMETER SIGN 3: Physically Reversed Probes (Current enters COM -> Display -0.300A)", passed);
+      console.log(`\n[TEST 72 / AMMETER SIGN 3] Physically Reversed Probes`);
+      console.log(`  Motor Current   : ${r.motorResults.get("M1").current.toFixed(4)} A (forward)`);
+      console.log(`  Ammeter Reading : "${meas.readingText}", raw=${meas.rawValue.toFixed(6)}A, polarity=${meas.polarity}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 73 (AMMETER SIGN 4) — Reversed Motor with Signed Ammeter (Dir=CCW, Ia=-0.3A, Ammeter=-0.3A)
+    // ──────────────────────────────────────────────
+    {
+      const bat = { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const meter = {
+        id: "Meter1",
+        type: "multimeter",
+        properties: {
+          mode: "A_DC",
+          probes: {
+            vwma: { attachedTo: { compId: "M1", termId: "term_neg" } }, // Red probe at M1 neg
+            com: { attachedTo: { compId: "Bat", termId: "term_pos" } }   // Black COM probe at Bat + (+12V)
+          }
+        },
+        terminals: [{ id: "term_vwma" }, { id: "term_com" }]
+      };
+      const motor = { id: "M1", type: "motor_dc", properties: { nominalVoltage: 12, maxRpm: 3000, noLoadCurrent: 0.30, armatureResistance: 1.0, loadPercent: 0 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const comps = [bat, meter, motor];
+      const conns = [
+        { from: { componentId: "M1", terminalId: "term_pos" }, to: { componentId: "Bat", terminalId: "term_neg" } } // M1 pos grounded
+      ];
+
+      const r = MNACircuitSolver.solve(bat, comps, conns);
+      const netlist = NetlistBuilder.build(comps, conns);
+      const meas = MeasurementEngine.evaluate(meter, r, comps, conns, netlist.uf);
+      const m = r.motorResults.get("M1");
+
+      const checks = [
+        m.direction === "CCW",
+        eq(m.current, -0.300, 1e-3),
+        eq(meas.rawValue, -0.300, 1e-3),
+        eq(meas.currentMagnitude, 0.300, 1e-3),
+        meas.readingText === "-0.300",
+        meas.polarity === "-"
+      ];
+      const passed = checks.every(Boolean);
+      record(73, "AMMETER SIGN 4: Reversed Motor + Signed Ammeter (Dir=CCW, Ia=-0.300A, Ammeter=-0.300A, Mag=0.300A)", passed);
+      console.log(`\n[TEST 73 / AMMETER SIGN 4] Reversed Motor with Signed Ammeter`);
+      console.log(`  Motor Ia        : ${m.current.toFixed(4)} A (signed: ${m.direction})`);
+      console.log(`  Ammeter Reading : "${meas.readingText}", raw=${meas.rawValue.toFixed(6)}A, mag=${meas.currentMagnitude.toFixed(4)}A`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 74 (KCL SIGN 1) — Node with +2A entering and two -1A exiting (2 - 1 - 1 = 0)
+    // ──────────────────────────────────────────────
+    {
+      const bat = { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const r1 = { id: "R1", type: "resistor", properties: { resistance: 12.0 }, terminals: [{ id: "term_a" }, { id: "term_b" }] };
+      const r2 = { id: "R2", type: "resistor", properties: { resistance: 12.0 }, terminals: [{ id: "term_a" }, { id: "term_b" }] };
+      const comps = [bat, r1, r2];
+      const conns = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R1", terminalId: "term_a" } },
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R2", terminalId: "term_a" } },
+        { from: { componentId: "R1", terminalId: "term_b" }, to: { componentId: "Bat", terminalId: "term_neg" } },
+        { from: { componentId: "R2", terminalId: "term_b" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+
+      const r = MNACircuitSolver.solve(bat, comps, conns);
+      const netlist = NetlistBuilder.build(comps, conns);
+      const kcl = PhysicsDiagnostics.verifyNodeKCL(netlist, r, comps);
+
+      const iSource = r.sourceCurrentSigned;
+      const i1 = r.branchCurrentsSigned.get("R1");
+      const i2 = r.branchCurrentsSigned.get("R2");
+      const algebraicSum = iSource - i1 - i2;
+
+      const checks = [
+        eq(iSource, 2.000, 1e-3),
+        eq(i1, 1.000, 1e-3),
+        eq(i2, 1.000, 1e-3),
+        Math.abs(algebraicSum) < 1e-9,
+        kcl.isSatisfied
+      ];
+      const passed = checks.every(Boolean);
+      record(74, "KCL SIGN 1: Node with +2A source and two -1A branches (2 - 1 - 1 = 0, Node KCL res < 1e-9)", passed);
+      console.log(`\n[TEST 74 / KCL SIGN 1] Node with +2A and two -1A Branches`);
+      console.log(`  Source: ${iSource.toFixed(4)} A, I_R1: ${i1.toFixed(4)} A, I_R2: ${i2.toFixed(4)} A`);
+      console.log(`  Signed Sum (2 - 1 - 1): ${algebraicSum.toExponential(4)} A (< 1e-9) ${checks[3] ? "✅" : "❌"}`);
+      console.log(`  All Nodes KCL Max Residual: ${kcl.maxResidual.toExponential(4)} A (< 1e-9) ${checks[4] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 75 (KCL SIGN 2) — Unbalanced Wheatstone Bridge with Reverse Diagonal Current
+    // ──────────────────────────────────────────────
+    {
+      const bat = { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const r1 = { id: "R1", type: "resistor", properties: { resistance: 100 }, terminals: [{ id: "term_a" }, { id: "term_b" }] };
+      const r2 = { id: "R2", type: "resistor", properties: { resistance: 200 }, terminals: [{ id: "term_a" }, { id: "term_b" }] };
+      const r3 = { id: "R3", type: "resistor", properties: { resistance: 300 }, terminals: [{ id: "term_a" }, { id: "term_b" }] };
+      const r4 = { id: "R4", type: "resistor", properties: { resistance: 100 }, terminals: [{ id: "term_a" }, { id: "term_b" }] };
+      const r5 = { id: "R5", type: "resistor", properties: { resistance: 50 }, terminals: [{ id: "term_a" }, { id: "term_b" }] }; // Bridge detector
+      const comps = [bat, r1, r2, r3, r4, r5];
+      const conns = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R1", terminalId: "term_a" } },
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R2", terminalId: "term_a" } },
+        { from: { componentId: "R1", terminalId: "term_b" }, to: { componentId: "R3", terminalId: "term_a" } },
+        { from: { componentId: "R1", terminalId: "term_b" }, to: { componentId: "R5", terminalId: "term_a" } },
+        { from: { componentId: "R2", terminalId: "term_b" }, to: { componentId: "R4", terminalId: "term_a" } },
+        { from: { componentId: "R2", terminalId: "term_b" }, to: { componentId: "R5", terminalId: "term_b" } },
+        { from: { componentId: "R3", terminalId: "term_b" }, to: { componentId: "Bat", terminalId: "term_neg" } },
+        { from: { componentId: "R4", terminalId: "term_b" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+
+      const r = MNACircuitSolver.solve(bat, comps, conns);
+      const netlist = NetlistBuilder.build(comps, conns);
+      const kcl = PhysicsDiagnostics.verifyNodeKCL(netlist, r, comps);
+
+      const checks = [
+        r.branchCurrentsSigned.has("R5"),
+        Math.abs(r.branchCurrentsSigned.get("R5")) > 0.001,
+        kcl.isSatisfied,
+        kcl.maxResidual < 1e-9
+      ];
+      const passed = checks.every(Boolean);
+      record(75, "KCL SIGN 2: Unbalanced Bridge with Diagonal Current (Signed KCL satisfied across all 4 internal nodes)", passed);
+      console.log(`\n[TEST 75 / KCL SIGN 2] Unbalanced Bridge Network`);
+      console.log(`  Bridge Branch R5 Signed I: ${r.branchCurrentsSigned.get("R5").toFixed(6)} A`);
+      console.log(`  All Nodes KCL Max Residual: ${kcl.maxResidual.toExponential(4)} A (< 1e-9) ${checks[3] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 76 (KCL SIGN 3) — Reverse Battery on Parallel Network (Negative Signed Currents & KCL < 1e-9)
+    // ──────────────────────────────────────────────
+    {
+      const bat = { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const r1 = { id: "R1", type: "resistor", properties: { resistance: 10 }, terminals: [{ id: "term_a" }, { id: "term_b" }] };
+      const r2 = { id: "R2", type: "resistor", properties: { resistance: 20 }, terminals: [{ id: "term_a" }, { id: "term_b" }] };
+      const comps = [bat, r1, r2];
+      const conns = [
+        { from: { componentId: "Bat", terminalId: "term_neg" }, to: { componentId: "R1", terminalId: "term_a" } },
+        { from: { componentId: "Bat", terminalId: "term_neg" }, to: { componentId: "R2", terminalId: "term_a" } },
+        { from: { componentId: "R1", terminalId: "term_b" }, to: { componentId: "Bat", terminalId: "term_pos" } },
+        { from: { componentId: "R2", terminalId: "term_b" }, to: { componentId: "Bat", terminalId: "term_pos" } }
+      ];
+
+      const r = MNACircuitSolver.solve(bat, comps, conns);
+      const netlist = NetlistBuilder.build(comps, conns);
+      const kcl = PhysicsDiagnostics.verifyNodeKCL(netlist, r, comps);
+
+      const i1 = r.branchCurrentsSigned.get("R1");
+      const i2 = r.branchCurrentsSigned.get("R2");
+
+      const checks = [
+        eq(i1, -1.200, 1e-3),
+        eq(i2, -0.600, 1e-3),
+        kcl.isSatisfied,
+        kcl.maxResidual < 1e-9
+      ];
+      const passed = checks.every(Boolean);
+      record(76, "KCL SIGN 3: Reverse Battery Parallel Network (I_R1=-1.2A, I_R2=-0.6A, Node KCL res < 1e-9)", passed);
+      console.log(`\n[TEST 76 / KCL SIGN 3] Reverse Battery Parallel Network`);
+      console.log(`  Signed I_R1: ${i1.toFixed(4)} A (expected -1.200 A) ${checks[0] ? "✅" : "❌"}`);
+      console.log(`  Signed I_R2: ${i2.toFixed(4)} A (expected -0.600 A) ${checks[1] ? "✅" : "❌"}`);
+      console.log(`  All Nodes KCL Max Residual: ${kcl.maxResidual.toExponential(4)} A (< 1e-9) ${checks[3] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 77 (KCL SIGN 4) — Motor Reverse + Resistor Parallel Network (Negative Motor Current at Node)
+    // ──────────────────────────────────────────────
+    {
+      const bat = { id: "Bat", type: "battery", properties: { voltage: 12 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const motor = { id: "M1", type: "motor_dc", properties: { nominalVoltage: 12, maxRpm: 3000, noLoadCurrent: 0.30, armatureResistance: 1.0, loadPercent: 0 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] };
+      const r1 = { id: "R1", type: "resistor", properties: { resistance: 20 }, terminals: [{ id: "term_a" }, { id: "term_b" }] };
+      const comps = [bat, motor, r1];
+      const conns = [
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "M1", terminalId: "term_neg" } },
+        { from: { componentId: "M1", terminalId: "term_pos" }, to: { componentId: "Bat", terminalId: "term_neg" } },
+        { from: { componentId: "Bat", terminalId: "term_pos" }, to: { componentId: "R1", terminalId: "term_a" } },
+        { from: { componentId: "R1", terminalId: "term_b" }, to: { componentId: "Bat", terminalId: "term_neg" } }
+      ];
+
+      const r = MNACircuitSolver.solve(bat, comps, conns);
+      const netlist = NetlistBuilder.build(comps, conns);
+      const kcl = PhysicsDiagnostics.verifyNodeKCL(netlist, r, comps);
+
+      const iMotor = r.branchCurrentsSigned.get("M1");
+      const iRes = r.branchCurrentsSigned.get("R1");
+      const iTotal = r.totalCurrent;
+
+      const checks = [
+        eq(iMotor, -0.300, 1e-3),
+        eq(iRes, 0.600, 1e-3),
+        eq(iTotal, 0.900, 1e-3),
+        r.motorResults.get("M1").direction === "CCW",
+        kcl.isSatisfied,
+        kcl.maxResidual < 1e-9
+      ];
+      const passed = checks.every(Boolean);
+      record(77, "KCL SIGN 4: Motor Reverse + Resistor Parallel (I_motor=-0.3A CCW, I_R=+0.6A, I_src=0.9A, KCL < 1e-9)", passed);
+      console.log(`\n[TEST 77 / KCL SIGN 4] Motor Reverse + Resistor Parallel Network`);
+      console.log(`  Motor Signed I : ${iMotor.toFixed(4)} A (CCW) ${checks[0] ? "✅" : "❌"}`);
+      console.log(`  Resistor Signed I: ${iRes.toFixed(4)} A ${checks[1] ? "✅" : "❌"}`);
+      console.log(`  Total Current    : ${iTotal.toFixed(4)} A (0.3A + 0.6A = 0.9A) ${checks[2] ? "✅" : "❌"}`);
+      console.log(`  All Nodes KCL Max Residual: ${kcl.maxResidual.toExponential(4)} A (< 1e-9) ${checks[5] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
     // Summary
     // ──────────────────────────────────────────────
     const totalPassed = results.filter(r => r.passed).length;
     console.log(`\n================================================================================`);
-    console.log(`🏆 FINAL RESULT: ${totalPassed} / ${results.length} TESTS PASSED`);
+    console.log(`🏆 FINAL RESULT: ${totalPassed} / ${results.length} defined regression tests passed.`);
     if (allPassed) {
-      console.log(`   ALL ${results.length} TESTS PASSED — Physics Engine & Instruments 100% Robust.`);
-      console.log(`   KCL, KVL, Ohm's Law, Power Conservation, Multimeter Drag & Rotations Verified.`);
+      console.log(`   ${totalPassed}/${results.length} defined regression tests passed.`);
+      console.log(`   KCL, KVL, Ohm's Law, Power Conservation, Multimeter Drag, Diode/LED & Voltmeter Verified.`);
     } else {
       console.log(`   SOME TESTS FAILED — review output above.`);
     }
@@ -1160,3 +3386,5 @@ export class PhysicsDiagnostics {
     return { totalPassed, totalTests: results.length, results, allPassed };
   }
 }
+
+

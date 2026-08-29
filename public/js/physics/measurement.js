@@ -82,28 +82,42 @@ export class MeasurementEngine {
     // --- MODE 2: DC CURRENT (A_DC) ---
     if (mode === "A_DC") {
       if (netVwma === netCom) {
-        return { readingText: "0.00", rawValue: 0, unit: "A", isWarning: false, warningMessage: "Shunted Probes" };
+        return { readingText: "0.00", rawValue: 0, currentMagnitude: 0, unit: "A", polarity: "+", isWarning: false, warningMessage: "Shunted Probes" };
       }
 
       let currentVal = 0;
       if (circuitResult?.ammeterCurrents && circuitResult.ammeterCurrents.has(meterComp.id)) {
         currentVal = circuitResult.ammeterCurrents.get(meterComp.id) || 0;
-      } else if (circuitResult?.totalCurrent) {
+      } else if (circuitResult?.totalCurrent !== undefined && circuitResult.totalCurrent !== null) {
         currentVal = circuitResult.totalCurrent;
       }
 
-      const isOvercurrent = currentVal > 10.0;
+      const currentMag = Math.abs(currentVal);
+      const isShortCircuit = circuitResult?.shortCircuit === true;
+      const isOvercurrent = currentMag > 10.0 || isShortCircuit;
+
       let formatted = "0.00";
-      if (currentVal >= 10.0) formatted = currentVal.toFixed(2);
-      else if (currentVal >= 1.0) formatted = currentVal.toFixed(2);
-      else if (currentVal > 0.0001) formatted = currentVal.toFixed(3);
+      let warningMsg = null;
+
+      if (isShortCircuit || currentMag > 10.0) {
+        formatted = "OVERLOAD";
+        warningMsg = "⚠️ Short Circuit Risk — Ammeter connected in parallel! Ammeter must be connected in series with load.";
+      } else if (currentMag < 1e-4) {
+        formatted = "0.000";
+      } else if (currentMag >= 1.0) {
+        formatted = currentVal.toFixed(2);
+      } else {
+        formatted = currentVal.toFixed(3);
+      }
 
       return {
         readingText: formatted,
         rawValue: currentVal,
+        currentMagnitude: currentMag,
+        polarity: currentVal >= 0 ? "+" : "-",
         unit: "A",
         isWarning: isOvercurrent,
-        warningMessage: isOvercurrent ? "⚠️ OVERCURRENT / KORSLET" : null
+        warningMessage: warningMsg
       };
     }
 

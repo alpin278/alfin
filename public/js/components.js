@@ -176,7 +176,7 @@ export const COMPONENT_PROTOTYPES = {
     icon: "🔴",
     width: 90,
     height: 85,
-    defaultProps: { forwardVoltage: 2.0, maxCurrent: 0.025, resistance: 10 },
+    defaultProps: { forwardVoltage: 2.0, nominalCurrent: 0.020, maxContinuousCurrent: 0.025 },
     terminals: [
       { id: "term_anode", name: "A", label: "Anoda (+)", relX: 15, relY: 65, color: "#ef4444" },
       { id: "term_cathode", name: "K", label: "Katoda (-)", relX: 75, relY: 65, color: "#0f172a" }
@@ -212,7 +212,18 @@ export const COMPONENT_PROTOTYPES = {
     icon: "⚙️",
     width: 120,
     height: 100,
-    defaultProps: { nominalVoltage: 12, powerRating: 24, resistance: 6, maxRpm: 3000, currentRpm: 0, direction: "CW" },
+    defaultProps: {
+      nominalVoltage: 12,
+      maxRpm: 3000,
+      noLoadRpm: 3000,
+      noLoadCurrent: 0.30,
+      armatureResistance: 1.0,
+      resistance: 1.0,
+      ratedCurrent: 2.0,
+      loadPercent: 0,
+      currentRpm: 0,
+      direction: "CW"
+    },
     terminals: [
       { id: "term_pos", name: "+", label: "Pin + (Merah)", relX: 18, relY: 76, color: "#ef4444" },
       { id: "term_neg", name: "-", label: "Pin - (Hitam)", relX: 102, relY: 76, color: "#0f172a" }
@@ -1426,8 +1437,10 @@ export class ComponentEngine {
     backdrop.className = "quick-edit-modal-backdrop";
 
     const currentV = comp.properties.nominalVoltage || 12;
-    const currentW = comp.properties.powerRating || 24;
-    const currentRpm = comp.properties.maxRpm || 3000;
+    const currentRpm = comp.properties.maxRpm || comp.properties.noLoadRpm || 3000;
+    const currentI0 = comp.properties.noLoadCurrent || 0.30;
+    const currentRa = comp.properties.armatureResistance || comp.properties.resistance || 1.0;
+    const currentLoad = comp.properties.loadPercent || 0;
 
     backdrop.innerHTML = `
       <div class="quick-edit-modal">
@@ -1442,16 +1455,22 @@ export class ComponentEngine {
             <span class="input-unit">V</span>
           </div>
 
-          <label class="input-label">Daya Motor (Watt):</label>
-          <div class="modal-input-group">
-            <input type="number" class="modal-input" id="modal-motor-w" value="${currentW}" min="1" max="500">
-            <span class="input-unit">W</span>
-          </div>
-
-          <label class="input-label">Kecepatan Maksimal (RPM):</label>
+          <label class="input-label">Kecepatan Tanpa Beban (RPM):</label>
           <div class="modal-input-group">
             <input type="number" class="modal-input" id="modal-motor-rpm" value="${currentRpm}" min="100" max="20000" step="100">
             <span class="input-unit">RPM</span>
+          </div>
+
+          <label class="input-label">Resistansi Jangkar / Armature (Ra):</label>
+          <div class="modal-input-group">
+            <input type="number" class="modal-input" id="modal-motor-ra" value="${currentRa}" min="0.05" max="100" step="0.1">
+            <span class="input-unit">Ω</span>
+          </div>
+
+          <label class="input-label" title="0% = tanpa beban, 100% = torsi yang menyebabkan motor stall pada tegangan nominal.">Beban Mekanik (% Torsi Stall):</label>
+          <div class="modal-input-group">
+            <input type="number" class="modal-input" id="modal-motor-load" value="${currentLoad}" min="0" max="100" step="5" title="0% = tanpa beban, 100% = torsi yang menyebabkan motor stall pada tegangan nominal.">
+            <span class="input-unit">% T_stall</span>
           </div>
 
           <label class="input-label">Preset Kecepatan Standar:</label>
@@ -1484,13 +1503,16 @@ export class ComponentEngine {
     backdrop.querySelector("#modal-cancel-btn").addEventListener("click", close);
     backdrop.querySelector("#modal-save-btn").addEventListener("click", () => {
       const v = Number(backdrop.querySelector("#modal-motor-v").value) || 12;
-      const w = Number(backdrop.querySelector("#modal-motor-w").value) || 24;
       const rpm = Number(rpmInput.value) || 3000;
-      const r = (v * v) / w;
+      const ra = Number(backdrop.querySelector("#modal-motor-ra").value) || 1.0;
+      const load = Number(backdrop.querySelector("#modal-motor-load").value) || 0;
+
       stateManager.updateComponentProperty(comp.id, "nominalVoltage", v);
-      stateManager.updateComponentProperty(comp.id, "powerRating", w);
       stateManager.updateComponentProperty(comp.id, "maxRpm", rpm);
-      stateManager.updateComponentProperty(comp.id, "resistance", Number(r.toFixed(2)));
+      stateManager.updateComponentProperty(comp.id, "noLoadRpm", rpm);
+      stateManager.updateComponentProperty(comp.id, "armatureResistance", ra);
+      stateManager.updateComponentProperty(comp.id, "resistance", ra);
+      stateManager.updateComponentProperty(comp.id, "loadPercent", load);
       close();
     });
   }
@@ -1693,6 +1715,7 @@ export class ComponentEngine {
     let activeSnap = null;
     let startScreenX = 0;
     let startScreenY = 0;
+    let pointerId = null;
 
     const getEvtCoords = (evt) => {
       if (evt.touches && evt.touches.length > 0) {
@@ -1704,8 +1727,10 @@ export class ComponentEngine {
     const onPointerDown = (e) => {
       e.stopPropagation();
       if (e.cancelable) e.preventDefault();
-      if (e.pointerId !== undefined && probeEl.setPointerCapture) {
-        try { probeEl.setPointerCapture(e.pointerId); } catch (err) {}
+
+      pointerId = e.pointerId ?? null;
+      if (pointerId !== null && probeEl.setPointerCapture) {
+        try { probeEl.setPointerCapture(pointerId); } catch (err) {}
       }
 
       isDragging = true;
@@ -1718,6 +1743,13 @@ export class ComponentEngine {
 
       probeEl.classList.add("is-dragging");
 
+      // Detach immediately upon drag initiation so the probe follows pointer in realtime
+      const currentTip = this.getProbeTipPosition(comp, probeKey);
+      comp.properties.probes[probeKey].attachedTo = null;
+      comp.properties.probes[probeKey].isPlaced = true;
+      comp.properties.probes[probeKey].worldX = currentTip.pos.x;
+      comp.properties.probes[probeKey].worldY = currentTip.pos.y;
+
       const onPointerMove = (moveEvt) => {
         if (!isDragging) return;
         if (moveEvt.cancelable) moveEvt.preventDefault();
@@ -1726,11 +1758,11 @@ export class ComponentEngine {
         if (moveCoords.x === undefined || moveCoords.y === undefined) return;
 
         const screenDist = Math.hypot(moveCoords.x - startScreenX, moveCoords.y - startScreenY);
-        if (screenDist > 3) hasMoved = true;
+        if (screenDist > 2) hasMoved = true;
         if (!hasMoved) return;
 
         const rawPos = this.workspace.screenToCanvas(moveCoords.x, moveCoords.y);
-        
+
         // Clean up previous highlights
         document.querySelectorAll(".terminal-node.probe-snap-highlight").forEach(t => t.classList.remove("probe-snap-highlight"));
 
@@ -1739,14 +1771,22 @@ export class ComponentEngine {
         if (snap && snap.compId !== comp.id) {
           activeSnap = snap;
           snap.el.classList.add("probe-snap-highlight");
+          comp.properties.probes[probeKey].worldX = snap.pos.x;
+          comp.properties.probes[probeKey].worldY = snap.pos.y;
+          comp.properties.probes[probeKey].attachedTo = {
+            compId: snap.compId,
+            termId: snap.termId
+          };
         } else {
           activeSnap = null;
+          comp.properties.probes[probeKey].worldX = rawPos.x;
+          comp.properties.probes[probeKey].worldY = rawPos.y;
+          comp.properties.probes[probeKey].attachedTo = null;
         }
 
-        comp.properties.probes[probeKey].worldX = activeSnap ? activeSnap.pos.x : rawPos.x;
-        comp.properties.probes[probeKey].worldY = activeSnap ? activeSnap.pos.y : rawPos.y;
         comp.properties.probes[probeKey].isPlaced = true;
 
+        // Realtime render of probe tip and dynamic cable bezier path
         this.updateProbeCable(comp, probeKey);
       };
 
@@ -1754,36 +1794,69 @@ export class ComponentEngine {
         if (!isDragging) return;
         isDragging = false;
         probeEl.classList.remove("is-dragging");
+
+        if (pointerId !== null && probeEl.releasePointerCapture) {
+          try { probeEl.releasePointerCapture(pointerId); } catch (err) {}
+        }
+        pointerId = null;
+
         window.removeEventListener("pointermove", onPointerMove);
         window.removeEventListener("pointerup", onPointerUp);
+        window.removeEventListener("pointercancel", onPointerUp);
+        window.removeEventListener("touchmove", onPointerMove);
+        window.removeEventListener("touchend", onPointerUp);
+        window.removeEventListener("touchcancel", onPointerUp);
 
         document.querySelectorAll(".terminal-node.probe-snap-highlight").forEach(t => t.classList.remove("probe-snap-highlight"));
 
-        if (!hasMoved) return;
+        if (!hasMoved) {
+          this.updateProbeCable(comp, probeKey);
+          return;
+        }
 
         if (activeSnap && activeSnap.compId !== comp.id) {
           comp.properties.probes[probeKey].attachedTo = {
             compId: activeSnap.compId,
             termId: activeSnap.termId
           };
-          this.updateProbeCable(comp, probeKey);
-          stateManager.updateComponentProperty(comp.id, "probes", comp.properties.probes);
-          stateManager.notify("simulation");
+          comp.properties.probes[probeKey].worldX = activeSnap.pos.x;
+          comp.properties.probes[probeKey].worldY = activeSnap.pos.y;
+          comp.properties.probes[probeKey].isPlaced = true;
         } else {
+          const releaseCoords = getEvtCoords(upEvt);
+          const releasePos = this.workspace.screenToCanvas(releaseCoords.x, releaseCoords.y);
           comp.properties.probes[probeKey].attachedTo = null;
-          comp.properties.probes[probeKey].isPlaced = false;
-          const releasePos = this.workspace.screenToCanvas(getEvtCoords(upEvt).x, getEvtCoords(upEvt).y);
-          stateManager.updateComponentProperty(comp.id, "probes", comp.properties.probes);
-          this.animateProbeRollback(comp, probeKey, releasePos.x, releasePos.y);
-          stateManager.notify("simulation");
+          comp.properties.probes[probeKey].isPlaced = true;
+          comp.properties.probes[probeKey].worldX = releasePos.x;
+          comp.properties.probes[probeKey].worldY = releasePos.y;
         }
+
+        stateManager.updateComponentProperty(comp.id, "probes", comp.properties.probes);
+        this.updateProbeCable(comp, probeKey);
+        stateManager.notify("simulation");
       };
 
       window.addEventListener("pointermove", onPointerMove, { passive: false });
       window.addEventListener("pointerup", onPointerUp);
+      window.addEventListener("pointercancel", onPointerUp);
+      window.addEventListener("touchmove", onPointerMove, { passive: false });
+      window.addEventListener("touchend", onPointerUp);
+      window.addEventListener("touchcancel", onPointerUp);
     };
 
     probeEl.addEventListener("pointerdown", onPointerDown, { passive: false });
+
+    // Double click on probe docks it cleanly back onto the multimeter casing
+    probeEl.addEventListener("dblclick", (e) => {
+      e.stopPropagation();
+      comp.properties.probes[probeKey].attachedTo = null;
+      comp.properties.probes[probeKey].isPlaced = false;
+      delete comp.properties.probes[probeKey].worldX;
+      delete comp.properties.probes[probeKey].worldY;
+      stateManager.updateComponentProperty(comp.id, "probes", comp.properties.probes);
+      this.updateProbeCable(comp, probeKey);
+      stateManager.notify("simulation");
+    });
   }
 
   animateProbeRollback(comp, probeKey, fromX, fromY) {

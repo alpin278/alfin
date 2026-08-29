@@ -1225,12 +1225,26 @@
   animation: motor-spin-anim var(--spin-speed, 0.35s) linear infinite;
 }
 
+.motor-rotor-blades.spinning.ccw,
+.workspace-component.spinning.ccw .motor-rotor-blades {
+  animation: motor-spin-anim-ccw var(--spin-speed, 0.35s) linear infinite;
+}
+
 @keyframes motor-spin-anim {
   from {
     transform: rotate(0deg);
   }
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes motor-spin-anim-ccw {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(-360deg);
   }
 }
 

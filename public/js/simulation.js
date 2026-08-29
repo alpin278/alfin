@@ -109,6 +109,32 @@ export class SimulationEngine {
         return;
       }
 
+      if (circuitResult?.overcurrent) {
+        state.simulation.status = "OVERCURRENT";
+        state.simulation.metrics = {
+          sourceEMF: circuitResult.sourceEMF ?? sourceVoltage,
+          terminalVoltage: circuitResult.terminalVoltage ?? sourceVoltage,
+          totalVoltage: circuitResult.terminalVoltage ?? sourceVoltage,
+          totalCurrent: circuitResult.totalCurrent,
+          totalPower: circuitResult.totalPower,
+          sourcePower: circuitResult.sourcePower,
+          loadPower: circuitResult.loadPower,
+          internalLoss: circuitResult.internalLoss,
+          power: circuitResult.power,
+          equivalentResistance: 0
+        };
+        this.updateMetricsUI(
+          circuitResult.terminalVoltage ?? sourceVoltage,
+          circuitResult.totalCurrent,
+          circuitResult.totalPower,
+          "WARNING",
+          "LED Overcurrent",
+          state.simulation.metrics
+        );
+        this.updateWireVisuals("active");
+        return;
+      }
+
       if (!circuitResult || circuitResult.openCircuit || circuitResult.totalCurrent < 1e-6) {
         state.simulation.status = "INCOMPLETE";
         state.simulation.metrics = {
@@ -142,8 +168,8 @@ export class SimulationEngine {
         equivalentResistance: circuitResult.equivalentResistance
       };
 
-      // 4. Update Loads (Lamps, LEDs, Motors, Diodes) based on exact physical branch voltages
-      this.updateLoadVisuals(components, circuitResult.branchVoltages, circuitResult.branchCurrents);
+      // 4. Update Loads (Lamps, LEDs, Motors, Diodes) based on exact physical branch voltages and solver results
+      this.updateLoadVisuals(components, circuitResult.branchVoltages, circuitResult.branchCurrents, circuitResult.motorResults);
 
       this.updateMetricsUI(
         circuitResult.terminalVoltage ?? circuitResult.totalVoltage,
@@ -189,9 +215,9 @@ export class SimulationEngine {
   }
 
   /**
-   * Update visual representations of active loads
+   * Update visual representations of active loads using Single Source of Truth
    */
-  updateLoadVisuals(components, branchVoltages, branchCurrents) {
+  updateLoadVisuals(components, branchVoltages, branchCurrents, motorResults = null) {
     components.forEach(comp => {
       const compEl = document.getElementById(`comp-${comp.id}`);
       if (!compEl) return;
@@ -213,32 +239,47 @@ export class SimulationEngine {
           }
         }
       } else if (comp.type === "led") {
-        if (compV >= 1.5) {
+        const vf = Number(comp.properties?.forwardVoltage || 2.0);
+        if (compI > 1e-4 && compV >= vf * 0.9) {
           compEl.classList.add("lit");
           const ledVis = compEl.querySelector(".led-visual");
           if (ledVis) ledVis.classList.add("lit");
         }
       } else if (comp.type === "motor_dc") {
-        const nominalV = Number(comp.properties?.nominalVoltage || 12);
-        const maxRpm = Number(comp.properties?.maxRpm || 3000);
+        const motorData = motorResults?.get(comp.id);
+        const rpm = motorData ? motorData.rpm : 0;
+        const direction = motorData ? motorData.direction : "CW";
+        const state = motorData ? motorData.state : (compV > 0.5 ? "RUNNING" : "OFF");
 
-        if (compV > 0.5) {
-          const speedRatio = Math.min(Math.max(compV / nominalV, 0.1), 1.8);
-          const actualRpm = Math.round(maxRpm * speedRatio);
-          comp.properties.currentRpm = actualRpm;
+        comp.properties.currentRpm = rpm;
+        comp.properties.direction = direction;
+
+        const rpmEl = compEl.querySelector(".rpm-number");
+        if (rpmEl) rpmEl.textContent = String(rpm);
+
+        const rotor = compEl.querySelector(".motor-rotor-blades");
+        if (state === "RUNNING" || state === "OVERLOAD") {
+          const speedRatio = Math.max(0.05, rpm / 3000);
+          const spinDuration = Math.max(0.05, (0.4 / speedRatio)).toFixed(3);
 
           compEl.classList.add("spinning");
-          const spinDuration = Math.max(0.1, (0.4 / speedRatio)).toFixed(3);
           compEl.style.setProperty("--spin-speed", `${spinDuration}s`);
 
-          const rotor = compEl.querySelector(".motor-rotor-blades");
-          if (rotor) {
-            rotor.classList.add("spinning");
-            rotor.style.setProperty("--spin-speed", `${spinDuration}s`);
+          if (direction === "CCW") {
+            compEl.classList.add("ccw");
+          } else {
+            compEl.classList.remove("ccw");
           }
 
-          const rpmEl = compEl.querySelector(".rpm-number");
-          if (rpmEl) rpmEl.textContent = String(actualRpm);
+          if (rotor) {
+            rotor.classList.add("spinning");
+            if (direction === "CCW") rotor.classList.add("ccw");
+            else rotor.classList.remove("ccw");
+            rotor.style.setProperty("--spin-speed", `${spinDuration}s`);
+          }
+        } else {
+          compEl.classList.remove("spinning", "ccw");
+          if (rotor) rotor.classList.remove("spinning", "ccw");
         }
       }
     });
