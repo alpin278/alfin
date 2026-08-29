@@ -25,14 +25,17 @@ export class SmartNumberingEngine {
     const terminalNumberMap = new Map();
 
     state.connections.forEach(conn => {
-      const keyFrom = `${conn.from.componentId}:${conn.from.terminalId}`;
-      const keyTo = `${conn.to.componentId}:${conn.to.terminalId}`;
-
-      if (!terminalNumberMap.has(keyFrom)) {
-        terminalNumberMap.set(keyFrom, currentNumber++);
+      if (conn.from?.componentId && conn.from?.terminalId) {
+        const keyFrom = `${conn.from.componentId}:${conn.from.terminalId}`;
+        if (!terminalNumberMap.has(keyFrom)) {
+          terminalNumberMap.set(keyFrom, currentNumber++);
+        }
       }
-      if (!terminalNumberMap.has(keyTo)) {
-        terminalNumberMap.set(keyTo, currentNumber++);
+      if (!conn.to?.isHanging && conn.to?.componentId && conn.to?.terminalId) {
+        const keyTo = `${conn.to.componentId}:${conn.to.terminalId}`;
+        if (!terminalNumberMap.has(keyTo)) {
+          terminalNumberMap.set(keyTo, currentNumber++);
+        }
       }
     });
 

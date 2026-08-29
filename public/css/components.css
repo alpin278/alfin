@@ -138,10 +138,13 @@
   position: absolute;
   pointer-events: auto;
   cursor: move;
+  touch-action: none !important;
+  -webkit-touch-callout: none;
   border: 2px solid transparent;
   border-radius: var(--radius-md);
   transition: outline 0.15s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
   user-select: none;
+  -webkit-user-select: none;
   background: transparent;
   display: flex;
   align-items: center;
@@ -558,83 +561,628 @@
 }
 
 /* --------------------------------------------------------------------------
-   E. REALISTIC MULTIMETER
+   E. REALISTIC INDUSTRIAL DIGITAL MULTIMETER (DARK EDITION WITH YELLOW TRIM)
    -------------------------------------------------------------------------- */
-.multimeter-visual {
+.comp-multimeter {
+  border-radius: 18px;
+  background: transparent !important;
+}
+
+.multimeter-visual.fluke-179-style {
   width: 100%;
   height: 100%;
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%);
-  border: 2.5px solid #1e293b;
-  border-radius: 12px;
-  padding: 6px 8px;
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
+  user-select: none;
   pointer-events: none;
+  box-sizing: border-box;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
 }
 
-.meter-comp-lcd {
+/* Main Vertical Handheld Casing with Yellow Holster Bumper Trim (Enlarged 12% Taller) */
+.meter-casing-vertical {
   width: 100%;
-  height: 38px;
-  background-color: #064e3b;
-  border: 2px solid #022c22;
-  border-radius: 6px;
+  height: 194px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  background: #0f172a;
+  border: 4px solid #f59e0b;
+  border-radius: 16px;
+  padding: 4.5px 6px 4px 6px;
+  box-shadow: 
+    0 12px 28px -4px rgba(0, 0, 0, 0.7),
+    0 5px 12px rgba(0, 0, 0, 0.45),
+    inset 0 1.5px 2px rgba(255, 255, 255, 0.15),
+    inset 0 0 0 1px #020617;
+  box-sizing: border-box;
+  z-index: 2;
+}
+
+/* Top Branding Header */
+.meter-header {
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 8px;
-  color: #34d399;
-  font-family: var(--font-mono);
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6);
+  padding: 0 2px 2px 2px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 1px;
+}
+
+.meter-brand-badge {
+  font-family: 'Space Grotesk', var(--font-heading), sans-serif;
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: #f59e0b;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.meter-model-text {
+  font-family: var(--font-mono), monospace;
+  font-size: 6.5px;
+  font-weight: 700;
+  color: #cbd5e1;
+  letter-spacing: 0.04em;
+}
+
+/* LCD Bezel & Light STN Display Screen (Fluke 179 Authentic Look) */
+.meter-lcd-bezel {
+  width: 100%;
+  background: #020617;
+  border: 1.5px solid #000000;
+  border-radius: 5px;
+  padding: 2.5px 4px;
+  box-shadow: 
+    inset 0 2px 5px rgba(0, 0, 0, 0.9),
+    0 1px 1px rgba(255, 255, 255, 0.1);
+  box-sizing: border-box;
+  margin-bottom: 2px;
+}
+
+.meter-lcd-screen-light {
+  width: 100%;
+  height: 52px;
+  background: linear-gradient(180deg, #e1ebe1 0%, #cad7ca 100%);
+  border: 1px solid #8e9f8e;
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 3px 5px;
+  box-shadow: 
+    inset 0 1px 2px rgba(0, 0, 0, 0.25),
+    inset 0 -1px 2px rgba(255, 255, 255, 0.5);
+  position: relative;
+  box-sizing: border-box;
+}
+
+.meter-lcd-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-mono), monospace;
+  font-size: 6.8px;
+  font-weight: 800;
+  color: #1e293b;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  min-height: 11px;
+}
+
+.lcd-badge-auto, .lcd-badge-rms {
+  padding: 0 1px;
+}
+
+.lcd-badge-mode {
+  padding: 0 2px;
+  font-size: 8px;
+  font-weight: 900;
+  color: #020617;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.meter-lcd-main-light {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 3px;
+  font-family: 'JetBrains Mono', 'Courier New', var(--font-mono), monospace;
+  color: #020617;
+  margin: 1px 0;
 }
 
 .meter-comp-val {
-  font-size: 1.15rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
+  font-size: 19px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: #020617;
 }
 
 .meter-comp-unit {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #a7f3d0;
+  font-size: 12px;
+  font-weight: 800;
+  color: #0f172a;
 }
 
-.meter-comp-dial {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: radial-gradient(circle, #334155 0%, #0f172a 100%);
-  border: 2px solid #1e293b;
+.meter-lcd-bar-graph {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5px;
+}
+
+.lcd-bar-scale {
+  display: flex;
+  justify-content: space-between;
+  font-size: 4.5px;
+  font-family: var(--font-mono), monospace;
+  font-weight: 700;
+  color: #475569;
+  line-height: 1;
+}
+
+.lcd-bar-track {
+  width: 100%;
+  height: 2px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.lcd-bar-fill {
+  width: 55%;
+  height: 100%;
+  background: #020617;
+}
+
+/* Function Push Buttons (Red Power Key + Slate Gray Controls) */
+.meter-function-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 3px;
+  box-sizing: border-box;
+  margin-bottom: 2px;
+}
+
+.meter-power-btn {
+  width: 16px;
+  height: 13px;
+  border-radius: 3.5px;
+  background: linear-gradient(180deg, #ef4444 0%, #b91c1c 100%);
+  border: 1px solid #7f1d1d;
+  color: #ffffff;
+  font-size: 7.5px;
+  font-weight: 900;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  cursor: default;
 }
 
-.dial-indicator {
-  width: 4px;
-  height: 12px;
-  background-color: #ffffff;
-  border-radius: 2px;
-  transform: translateY(-4px);
+.meter-chip-btn {
+  font-family: var(--font-mono), monospace;
+  font-size: 6px;
+  font-weight: 800;
+  color: #f1f5f9;
+  background: #334155;
+  border: 1px solid #1e293b;
+  border-radius: 2.5px;
+  padding: 1.5px 4px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
-.meter-comp-jacks {
+/* Center Rotary Selector Dial Section with Radial Markings */
+.meter-dial-section {
+  position: relative;
+  width: 100%;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 2px;
+}
+
+.meter-dial-label {
+  position: absolute;
+  font-family: 'Space Grotesk', var(--font-heading), sans-serif;
+  font-size: 7.5px;
+  font-weight: 800;
+  color: #94a3b8;
+  transition: all 0.2s ease;
+  pointer-events: none;
+}
+
+.meter-dial-label.label-v {
+  top: 2px;
+  left: 14px;
+}
+
+.meter-dial-label.label-vac {
+  top: 15px;
+  left: 4px;
+}
+
+.meter-dial-label.label-ohm {
+  top: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.meter-dial-label.label-cont {
+  top: 15px;
+  right: 4px;
+}
+
+.meter-dial-label.label-a {
+  top: 2px;
+  right: 14px;
+}
+
+.meter-dial-label.label-aac {
+  bottom: 2px;
+  right: 8px;
+  font-size: 6px;
+}
+
+.meter-dial-label.active {
+  color: #fbbf24;
+  font-weight: 900;
+  text-shadow: 
+    0 0 6px rgba(251, 191, 36, 0.95),
+    0 1px 2px rgba(0, 0, 0, 0.9);
+  transform: scale(1.3);
+}
+
+.meter-dial-label.label-ohm.active {
+  transform: translateX(-50%) scale(1.3);
+}
+
+/* Circular Rotary Knob with 3D Bar Handle & Pointer */
+.meter-rotary-knob {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #1e293b 0%, #0f172a 100%);
+  border: 2px solid #334155;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 
+    0 4px 8px rgba(0, 0, 0, 0.65),
+    inset 0 1px 1px rgba(255, 255, 255, 0.2),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.7);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.knob-face {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  border-radius: 50%;
+}
+
+.knob-bar-handle {
+  width: 10px;
+  height: 30px;
+  background: linear-gradient(90deg, #334155 0%, #1e293b 50%, #0f172a 100%);
+  border-radius: 3px;
+  border: 1px solid #475569;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+}
+
+.knob-pointer-arrow {
+  width: 3.5px;
+  height: 7px;
+  background: #fbbf24;
+  border-radius: 1px;
+  position: absolute;
+  top: 1.5px;
+  box-shadow: 0 0 4px #fbbf24;
+}
+
+/* 4-Port Banana Jack Input Panel with Yellow Accent Collars */
+.meter-jacks-panel {
   width: 100%;
   display: flex;
-  justify-content: space-around;
-  padding-bottom: 2px;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 0 4px 2px 4px;
+  box-sizing: border-box;
 }
 
-.meter-jack-label {
-  font-size: 0.65rem;
+.meter-banana-jack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5px;
+}
+
+.jack-socket-rim {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.8px solid #f59e0b;
+  background: #020617;
+  box-shadow: 
+    0 2px 4px rgba(0, 0, 0, 0.5),
+    inset 0 1px 1px rgba(255, 255, 255, 0.2);
+}
+
+.jack-com .jack-socket-rim {
+  border-color: #f59e0b;
+}
+
+.jack-vwma .jack-socket-rim {
+  border-color: #ef4444;
+}
+
+.jack-10a .jack-socket-rim,
+.jack-temp .jack-socket-rim {
+  border-color: #f59e0b;
+}
+
+.jack-socket-hole {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #000000;
+  border: 1px solid #334155;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.95);
+}
+
+.jack-name {
+  font-family: var(--font-mono), monospace;
+  font-size: 5.8px;
   font-weight: 800;
-  font-family: var(--font-mono);
-  color: #1e293b;
+  line-height: 1;
+  color: #f1f5f9;
+}
+
+.jack-com .jack-name {
+  color: #f59e0b;
+}
+
+.jack-vwma .jack-name {
+  color: #f87171;
+}
+
+/* Visual Probe Test Leads (Extension Wires & Needles) */
+.meter-probes-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible !important;
+  z-index: 1;
+}
+
+.meter-probes-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible !important;
+}
+
+.meter-probe-wire {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+  transition: none !important;
+  pointer-events: none;
+}
+
+.circuit-wire.wire-cut-preview {
+  stroke: #ef4444 !important;
+  stroke-width: 4px !important;
+  stroke-dasharray: 6, 6 !important;
+  animation: wireCutPulse 0.6s infinite linear !important;
+  filter: drop-shadow(0 0 10px rgba(239, 68, 68, 0.9)) !important;
+}
+
+@keyframes wireCutPulse {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
+
+.probe-assembly {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: auto !important;
+  cursor: grab;
+  z-index: 50;
+  touch-action: none !important;
+  user-select: none;
+}
+
+.probe-touch-hitbox {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 48px;
+  height: 56px;
+  background: transparent;
+  pointer-events: auto !important;
+  cursor: grab;
+  z-index: 10;
+}
+
+.probe-assembly:hover {
+  filter: drop-shadow(0 0 8px rgba(56, 189, 248, 1));
+}
+
+.probe-assembly.is-dragging {
+  cursor: grabbing !important;
+  filter: drop-shadow(0 0 14px rgba(56, 189, 248, 1)) !important;
+  transform: translate(-50%, -50%) scale(1.15);
+  z-index: 70;
+  transition: none !important;
+}
+
+/* Molded Finger Guard */
+.probe-finger-guard {
+  width: 20px;
+  height: 4.5px;
+  border-radius: 2px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  margin-bottom: -1px;
+  z-index: 3;
+}
+
+.guard-black {
+  background: #0f172a;
+  border: 1px solid #334155;
+}
+
+.guard-red {
+  background: #dc2626;
+  border: 1px solid #991b1b;
+}
+
+.probe-body-collar {
+  width: 14px;
+  height: 16px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+  position: relative;
+  z-index: 2;
+}
+
+.collar-black {
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  border: 1.5px solid #020617;
+}
+
+.collar-red {
+  background: linear-gradient(180deg, #ef4444 0%, #b91c1c 100%);
+  border: 1.5px solid #7f1d1d;
+}
+
+.probe-lead-label {
+  font-family: var(--font-mono), monospace;
+  font-size: 5.5px;
+  font-weight: 900;
+  color: #ffffff;
+  pointer-events: none;
+  letter-spacing: 0.02em;
+}
+
+.probe-grip {
+  width: 9px;
+  height: 11px;
+  border-radius: 1px;
+  margin-top: -1px;
+}
+
+.grip-black {
+  background: #0f172a;
+  border: 1px solid #020617;
+}
+
+.grip-red {
+  background: #dc2626;
+  border: 1px solid #7f1d1d;
+}
+
+/* Slender Tapered Metallic Needle Tip */
+.probe-pin-needle {
+  width: 2.5px;
+  height: 14px;
+  background: linear-gradient(90deg, #ffffff 0%, #cbd5e1 50%, #64748b 100%);
+  clip-path: polygon(0 0, 100% 0, 75% 100%, 25% 100%);
+  border-radius: 0 0 1px 1px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  margin-top: -1px;
+}
+
+/* Multimeter Terminal Overlay */
+.comp-multimeter .terminal-node {
+  width: 18px;
+  height: 18px;
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 1.5px dashed rgba(255, 255, 255, 0.4);
+  box-shadow: none;
+  z-index: 36;
+  opacity: 0.25;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.comp-multimeter:hover .terminal-node {
+  opacity: 0.8;
+}
+.comp-multimeter .terminal-node:hover,
+.comp-multimeter .terminal-node.snap-hover {
+  opacity: 1;
+  background-color: rgba(56, 189, 248, 0.9);
+  border-color: #ffffff;
+  transform: translate(-50%, -50%) scale(1.3);
+  box-shadow: 0 0 10px rgba(56, 189, 248, 1);
+}
+
+/* Interactive Probe Snap & Measurement Highlights on Circuit Terminals */
+.terminal-node.probe-snap-highlight {
+  transform: translate(-50%, -50%) scale(1.6) !important;
+  border-color: #38bdf8 !important;
+  background-color: #0284c7 !important;
+  box-shadow: 0 0 16px #38bdf8, inset 0 0 5px #ffffff !important;
+  animation: pulse-probe-snap 0.6s infinite alternate !important;
+  z-index: 70 !important;
+}
+
+.terminal-node.probe-attached-com {
+  box-shadow: 0 0 12px rgba(15, 23, 42, 0.9), 0 0 4px #38bdf8 !important;
+  border-color: #0f172a !important;
+}
+
+.terminal-node.probe-attached-vwma {
+  box-shadow: 0 0 12px rgba(220, 38, 38, 0.9), 0 0 4px #ef4444 !important;
+  border-color: #dc2626 !important;
+}
+
+@keyframes pulse-probe-snap {
+  0% {
+    transform: translate(-50%, -50%) scale(1.4);
+    box-shadow: 0 0 10px #38bdf8;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.75);
+    box-shadow: 0 0 20px #0284c7, 0 0 8px #ffffff;
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -682,181 +1230,7 @@
   box-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
 
-/* --------------------------------------------------------------------------
-   F2. REALISTIC COMPACT MULTIMETER WITH RED & BLACK PROBE LEADS
-   -------------------------------------------------------------------------- */
-.multimeter-visual {
-  width: 140px;
-  height: 125px;
-  background: linear-gradient(180deg, #f59e0b 0%, #d97706 15%, #b45309 100%);
-  border: 3px solid #78350f;
-  border-radius: 14px;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4), inset 0 2px 4px rgba(255, 255, 255, 0.4);
-  padding: 8px 10px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  position: relative;
-  user-select: none;
-  pointer-events: none;
-}
 
-.meter-comp-lcd {
-  width: 100%;
-  height: 38px;
-  background: #ecfdf5;
-  border: 2px solid #065f46;
-  border-radius: 6px;
-  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.3);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 10px;
-  margin-bottom: 6px;
-  position: relative;
-}
-
-.meter-comp-val {
-  font-family: var(--font-mono);
-  font-size: 1.15rem;
-  font-weight: 800;
-  color: #064e3b;
-  letter-spacing: 0.05em;
-}
-
-.meter-comp-unit {
-  font-family: var(--font-mono);
-  font-size: 0.85rem;
-  font-weight: 800;
-  color: #047857;
-}
-
-.meter-comp-dial {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: radial-gradient(circle, #334155 0%, #0f172a 100%);
-  border: 2px solid #64748b;
-  box-shadow: 0 3px 6px rgba(0,0,0,0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 6px;
-}
-
-.dial-knob {
-  width: 100%;
-  height: 100%;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.dial-notch {
-  width: 3px;
-  height: 10px;
-  background: #ffffff;
-  border-radius: 2px;
-  position: absolute;
-  top: 2px;
-}
-
-.meter-comp-jacks {
-  width: 100%;
-  display: flex;
-  justify-content: space-between;
-  padding: 0 10px;
-  position: relative;
-}
-
-.meter-jack-socket {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  position: relative;
-}
-
-.jack-label {
-  font-family: var(--font-mono);
-  font-size: 8px;
-  font-weight: 800;
-  color: #ffffff;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.8);
-}
-
-.meter-jack-socket.jack-black .jack-label {
-  color: #0f172a;
-  background: rgba(255, 255, 255, 0.9);
-  padding: 0 3px;
-  border-radius: 2px;
-}
-
-.meter-jack-socket.jack-red .jack-label {
-  color: #ffffff;
-  background: #dc2626;
-  padding: 0 3px;
-  border-radius: 2px;
-}
-
-/* Realistic Probe Cables Extending From Multimeter Jacks */
-.probe-wire-lead {
-  position: absolute;
-  top: 14px;
-  width: 6px;
-  height: 20px;
-  border-radius: 3px;
-  z-index: 10;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
-}
-
-.probe-black-lead {
-  background: linear-gradient(180deg, #1e293b 0%, #020617 100%);
-  border: 1px solid #334155;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.probe-red-lead {
-  background: linear-gradient(180deg, #ef4444 0%, #b91c1c 100%);
-  border: 1px solid #f87171;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.probe-pin-handle {
-  width: 10px;
-  height: 12px;
-  position: absolute;
-  bottom: -6px;
-  left: -3px;
-  border-radius: 2px;
-}
-
-.handle-black {
-  background: #020617;
-  border: 1px solid #475569;
-}
-
-.handle-red {
-  background: #991b1b;
-  border: 1px solid #fca5a5;
-}
-
-.multimeter-label {
-  position: absolute;
-  bottom: -20px;
-  font-size: 11px;
-  font-family: var(--font-mono);
-  font-weight: 700;
-  color: #1e293b;
-  background: rgba(255, 255, 255, 0.95);
-  padding: 1px 6px;
-  border-radius: 4px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-  white-space: nowrap;
-}
 
 /* Terminal Node custom coloring for probe tips */
 #components-layer .terminal-node[data-term-id="term_com"] {

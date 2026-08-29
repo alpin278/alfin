@@ -42,6 +42,7 @@ Route::middleware('auth')->group(function () {
     // 6. Laporan Praktikum Mahasiswa
     Route::get('/laporan-saya', [ReportSubmissionController::class, 'index'])->name('laporan.saya');
     Route::post('/laporan-saya/upload', [ReportSubmissionController::class, 'store'])->name('laporan.upload');
+    Route::post('/laporan/{id}/ajukan-edit', [ReportSubmissionController::class, 'requestEdit'])->name('laporan.request_edit');
 
     // Profile Routes (Breeze)
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
@@ -51,10 +52,14 @@ Route::middleware('auth')->group(function () {
 
 // Admin Only Routes (Kelola Modul CRUD & Penilaian Laporan)
 Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(function () {
+    Route::get('/daftar-modul-siswa', [AdminModuleController::class, 'studentView'])->name('student_modules.index');
     Route::resource('modules', AdminModuleController::class);
     Route::get('/laporan', [AdminReportSubmissionController::class, 'index'])->name('laporan.index');
     Route::get('/laporan/{id}', [AdminReportSubmissionController::class, 'show'])->name('laporan.show');
     Route::post('/laporan/{id}/nilai', [AdminReportSubmissionController::class, 'grade'])->name('laporan.grade');
+    Route::post('/laporan/{id}/approve-edit', [AdminReportSubmissionController::class, 'approveEdit'])->name('laporan.approve_edit');
+    Route::post('/laporan/{id}/reject-edit', [AdminReportSubmissionController::class, 'rejectEdit'])->name('laporan.reject_edit');
+    Route::delete('/laporan/{id}', [AdminReportSubmissionController::class, 'destroy'])->name('laporan.destroy');
 
     Route::get('/dashboard', function () {
         return redirect()->route('admin.modules.index');

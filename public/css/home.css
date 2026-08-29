@@ -1,8 +1,17 @@
 /**
- * DTE VirtualLab — Home & Core Base Styles (Mobile-First, WCAG AA, Modern Academic)
+ * Fluxus — Home & Core Base Styles (Mobile-First, WCAG AA, Modern Academic)
  */
 
 @import url("variables.css");
+
+/* Typography: Space Grotesk for headings/brand and Inter for body text */
+body, p, input, select, textarea, button, table, td, th {
+  font-family: 'Inter', sans-serif;
+}
+
+h1, h2, h3, h4, h5, h6, .logo, .brand-name, .brand-title, .logo-text, .home-logo-text {
+  font-family: 'Space Grotesk', sans-serif;
+}
 
 * {
   box-sizing: border-box;
@@ -15,7 +24,7 @@ html, body {
   overflow-x: hidden !important;
   width: 100%;
   min-height: 100vh;
-  font-family: var(--font-sans);
+  font-family: 'Inter', sans-serif;
   background-color: var(--color-bg-base);
   color: var(--color-text-primary);
   line-height: 1.6;

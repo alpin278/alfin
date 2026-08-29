@@ -7,7 +7,7 @@
     <a href="{{ route('beranda') }}" class="brand-logo" style="text-decoration: none;">
       <img src="{{ asset('assets/logo.png') }}" alt="Logo" class="brand-logo-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block';">
       <span style="color: #facc15; font-size: 1.3rem; display: none;">⚡</span>
-      <span class="brand-title">DTE VirtualLab</span>
+      <span class="brand-title">Fluxus</span>
     </a>
     <button onclick="toggleStudentDrawer(false)" style="background: none; border: none; color: #94a3b8; font-size: 1.3rem; cursor: pointer; padding: 4px;" aria-label="Tutup Menu">✕</button>
   </div>
@@ -33,23 +33,22 @@
 
   @auth
     <div style="border-top: 1px solid #334155; padding-top: 16px; margin-top: auto; display: flex; flex-direction: column; gap: 10px;">
-      <div style="display: flex; align-items: center; gap: 10px;">
+      <!-- Clickable Profile Area -->
+      <a href="{{ route('profile.edit') }}" onclick="toggleStudentDrawer(false)" style="display: flex; align-items: center; gap: 10px; text-decoration: none; padding: 6px; border-radius: 8px; transition: background 0.15s;" onmouseover="this.style.background='rgba(30, 41, 59, 0.7)'" onmouseout="this.style.background='transparent'" title="Buka Pengaturan Profil">
         <div class="user-avatar-sm">{{ strtoupper(substr(Auth::user()->name ?? 'U', 0, 1)) }}</div>
         <div style="min-width: 0; flex: 1;">
           <div style="font-size: 0.85rem; font-weight: 700; color: #f8fafc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ Auth::user()->name }}</div>
           <div style="font-size: 0.72rem; color: #94a3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ Auth::user()->email }}</div>
         </div>
-      </div>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+      </a>
+
       @if(Auth::user()->role !== 'admin')
         <a href="{{ route('laporan.saya') }}" class="drawer-link {{ request()->routeIs('laporan.saya') ? 'active' : '' }}" style="padding: 8px 10px; font-size: 0.82rem;">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
           <span>Laporan Saya</span>
         </a>
       @endif
-      <a href="{{ route('profile.edit') }}" class="drawer-link" style="padding: 8px 10px; font-size: 0.82rem;">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-        <span>Pengaturan Profil</span>
-      </a>
       <form method="POST" action="{{ route('logout') }}">
         @csrf
         <button type="submit" class="btn-logout-clean" style="display: block; width: 100%; text-align: center; padding: 8px;">Keluar / Logout</button>
@@ -66,7 +65,7 @@
       <button class="btn-mobile-student-menu" onclick="toggleStudentDrawer(true)" aria-label="Buka Menu Navigasi">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
       </button>
-      <a href="{{ route('beranda') }}" class="home-logo" title="Beranda DTE VirtualLab">
+      <a href="{{ route('beranda') }}" class="home-logo" title="Beranda Fluxus">
         <div class="brand-logo-img-wrapper">
           <img src="{{ asset('assets/logo.png') }}" alt="Logo UNP/PTEI" class="brand-logo-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-flex';">
           <span class="brand-logo-fallback" style="display: none; color: var(--color-accent-yellow);">
@@ -76,7 +75,7 @@
           </span>
         </div>
         <div class="logo-text-group">
-          <span class="logo-text">DTE VirtualLab</span>
+          <span class="logo-text">Fluxus</span>
           <span class="logo-badge">V2.0</span>
         </div>
       </a>

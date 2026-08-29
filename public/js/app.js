@@ -192,7 +192,7 @@ class DTEVirtualLabApp {
     const btnHelp = document.getElementById("btn-help");
     if (btnHelp) {
       btnHelp.addEventListener("click", () => {
-        alert("💡 Panduan Praktikum DTE VirtualLab:\n\n1. Tarik komponen ke workspace.\n2. Klik pin untuk menyambung kabel (Siku 90° Proteus).\n3. Klik di tengah kabel untuk membuat cabang paralel (Junction Dot).\n4. Tekan tombol 'R' atau klik 🔄 Putar untuk memutar komponen 90°.\n5. Klik saklar untuk ON/OFF.");
+        alert("💡 Panduan Praktikum Fluxus:\n\n1. Tarik komponen ke workspace.\n2. Klik pin untuk menyambung kabel (Siku 90° Proteus).\n3. Klik di tengah kabel untuk membuat cabang paralel (Junction Dot).\n4. Tekan tombol 'R' atau klik 🔄 Putar untuk memutar komponen 90°.\n5. Klik saklar untuk ON/OFF.");
       });
     }
   }
@@ -605,7 +605,6 @@ class DTEVirtualLabApp {
     const btnWires = document.getElementById("nav-btn-wires");
     const btnMeter = document.getElementById("nav-btn-meter");
     const btnSim = document.getElementById("nav-btn-sim");
-    const btnMenu = document.getElementById("nav-btn-menu");
 
     const setActiveNav = (targetBtn) => {
       document.querySelectorAll(".mobile-bottom-nav .nav-item").forEach(b => b.classList.remove("active"));
@@ -693,14 +692,6 @@ class DTEVirtualLabApp {
           btnSim.classList.remove("sim-running");
           if (textSpan) textSpan.textContent = "Simulasi";
         }
-      });
-    }
-
-    // 5. LAINNYA: Open Menu Sheet
-    if (btnMenu) {
-      btnMenu.addEventListener("click", () => {
-        setActiveNav(btnMenu);
-        this.openMobileMenuSheet();
       });
     }
   }
@@ -826,60 +817,6 @@ class DTEVirtualLabApp {
         closeAll();
       });
     });
-  }
-
-  openMobileMenuSheet() {
-    const existing = document.getElementById("mobile-menu-sheet");
-    const existingBackdrop = document.getElementById("mobile-menu-backdrop");
-    if (existing) {
-      existing.remove();
-      existingBackdrop?.remove();
-      return;
-    }
-
-    const backdrop = document.createElement("div");
-    backdrop.id = "mobile-menu-backdrop";
-    backdrop.className = "mobile-sheet-backdrop";
-
-    const sheet = document.createElement("div");
-    sheet.id = "mobile-menu-sheet";
-    sheet.className = "mobile-bottom-sheet";
-    sheet.style.borderTopColor = "#a855f7";
-
-    sheet.innerHTML = `
-      <div class="mobile-sheet-handle"></div>
-      <div class="mobile-sheet-header">
-        <span style="font-weight: 700; font-size: 0.9rem; color: #c084fc;">⚙️ MENU AKSI CEPAT</span>
-        <button style="background: none; border: none; color: #94a3b8; font-size: 1.2rem; cursor: pointer; padding: 2px 6px;" id="btn-close-menu-sheet">✕</button>
-      </div>
-      <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
-        <button id="m-btn-undo" style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 12px 10px; color: #cbd5e1; font-weight: 600; font-size: 0.82rem; cursor: pointer;">↩ Undo</button>
-        <button id="m-btn-redo" style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 12px 10px; color: #cbd5e1; font-weight: 600; font-size: 0.82rem; cursor: pointer;">↪ Redo</button>
-        <button id="m-btn-reset" style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 12px 10px; color: #f87171; font-weight: 600; font-size: 0.82rem; cursor: pointer;">🔄 Reset Rangkaian</button>
-        <button id="m-btn-fit" style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 12px 10px; color: #38bdf8; font-weight: 600; font-size: 0.82rem; cursor: pointer;">🎯 Pusatkan Layar</button>
-      </div>
-      <a href="/studi-kasus" style="background: linear-gradient(135deg, #a855f7, #7e22ce); color: #fff; text-align: center; padding: 12px; border-radius: 8px; font-weight: 600; font-size: 0.85rem; text-decoration: none; margin-top: 6px;">📖 Buka Studi Kasus (PBL)</a>
-    `;
-
-    document.body.appendChild(backdrop);
-    document.body.appendChild(sheet);
-
-    const closeAll = () => {
-      sheet.remove();
-      backdrop.remove();
-    };
-
-    backdrop.addEventListener("click", closeAll);
-    sheet.querySelector("#btn-close-menu-sheet").addEventListener("click", closeAll);
-    sheet.querySelector("#m-btn-undo").addEventListener("click", () => { stateManager.undo(); closeAll(); });
-    sheet.querySelector("#m-btn-redo").addEventListener("click", () => { stateManager.redo(); closeAll(); });
-    sheet.querySelector("#m-btn-reset").addEventListener("click", () => {
-      if (confirm("Kosongkan workspace?")) {
-        stateManager.clearWorkspace();
-      }
-      closeAll();
-    });
-    sheet.querySelector("#m-btn-fit").addEventListener("click", () => { stateManager.resetWorkspace(); closeAll(); });
   }
 
   openSaveCaseModal() {

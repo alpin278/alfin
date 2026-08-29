@@ -4,15 +4,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Studi Kasus Problem-Based Learning (PBL) — DTE VirtualLab">
-  <title>Studi Kasus (PBL) — DTE VirtualLab</title>
+  <meta name="description" content="Studi Kasus Problem-Based Learning (PBL) — Fluxus">
+  <title>Studi Kasus (PBL) — Fluxus</title>
 
-  <!-- Google Fonts -->
+  <!-- Google Fonts: Space Grotesk, Inter, & JetBrains Mono -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link
-    href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap"
-    rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 
   <!-- Styles -->
   <link rel="stylesheet" href="{{ asset('css/reset.css') }}">
@@ -53,7 +51,7 @@
                 {{ $case->creator->name }}
               </span>
             @else
-              <span class="case-difficulty diff-easy">Praktikum DTE</span>
+              <span class="case-difficulty diff-easy">Praktikum Fluxus</span>
             @endif
           </div>
           <div class="case-icon-wrapper">

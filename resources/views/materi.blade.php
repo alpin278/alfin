@@ -4,11 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="csrf-token" content="{{ csrf_token() }}">
-  <title>Materi Pembelajaran — DTE VirtualLab</title>
+  <title>Materi Pembelajaran — Fluxus</title>
   
+  <!-- Google Fonts: Space Grotesk, Inter, & JetBrains Mono -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
   
   <link rel="stylesheet" href="{{ asset('css/variables.css') }}">
   <link rel="stylesheet" href="{{ asset('css/home.css') }}">
@@ -70,8 +71,8 @@
             </div>
           </div>
 
-          <h3 class="materi-title">{{ $module->title }}</h3>
-          <p class="materi-desc">{{ $module->description }}</p>
+          <h3 class="materi-title" title="{{ $module->title }}">{{ $module->title }}</h3>
+          <p class="materi-desc" title="{{ $module->description }}">{{ $module->description }}</p>
 
           <!-- Progress Bar Dinamis -->
           <div class="materi-progress-bar-track">

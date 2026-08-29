@@ -5,15 +5,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="csrf-token" content="{{ csrf_token() }}">
-  <meta name="description" content="DTE VirtualLab V2 — Smart Numbering. Virtual Laboratory for Basic Electronics">
-  <title>DTE VirtualLab — Simulator Rangkaian Listrik</title>
+  <meta name="description" content="Fluxus V2 — Smart Numbering. Virtual Laboratory for Basic Electronics">
+  <title>Fluxus — Simulator Rangkaian Listrik</title>
 
-  <!-- Google Fonts Poppins & JetBrains Mono -->
+  <!-- Google Fonts: Space Grotesk, Inter, & JetBrains Mono -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link
-    href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap"
-    rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 
   <!-- CSS Architecture -->
   <link rel="stylesheet" href="{{ asset('css/reset.css') }}?v={{ time() }}">
@@ -55,10 +53,10 @@
             <polyline points="12 19 5 12 12 5"></polyline>
           </svg>
         </a>
-        <a href="{{ route('beranda') }}" class="brand-logo" title="Beranda DTE VirtualLab">
+        <a href="{{ route('beranda') }}" class="brand-logo" title="Beranda Fluxus">
           <img src="{{ asset('assets/logo.png') }}" alt="Logo" class="brand-logo-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block';">
           <span style="color: var(--color-primary-yellow); font-size: 1.3rem; display: none;">⚡</span>
-          <span class="brand-title">DTE VirtualLab</span>
+          <span class="brand-title">Fluxus</span>
         </a>
       </div>
 
@@ -399,12 +397,6 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
         </span>
         <span>Simulasi</span>
-      </button>
-      <button class="nav-item" id="nav-btn-menu">
-        <span class="nav-item-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1.5"></circle><circle cx="19" cy="12" r="1.5"></circle><circle cx="5" cy="12" r="1.5"></circle></svg>
-        </span>
-        <span>Lainnya</span>
       </button>
     </nav>
   </div>

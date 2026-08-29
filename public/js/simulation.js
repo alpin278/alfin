@@ -149,11 +149,29 @@ export class SimulationEngine {
   buildEquipotentialNets(components, connections) {
     const uf = new UnionFind();
 
+    // Map each wire ID to its root terminal or internal net key
+    connections.forEach(conn => {
+      if (conn.from?.componentId && conn.from?.terminalId) {
+        const fromKey = `${conn.from.componentId}:${conn.from.terminalId}`;
+        uf.union(conn.id, fromKey);
+      }
+      if (!conn.to?.isHanging && conn.to?.componentId && conn.to?.terminalId) {
+        const toKey = `${conn.to.componentId}:${conn.to.terminalId}`;
+        uf.union(conn.id, toKey);
+      }
+      if (conn.to?.isWireBranch && conn.to?.targetWireId) {
+        uf.union(conn.id, conn.to.targetWireId);
+      }
+    });
+
     // Group connected wire terminals
     connections.forEach(conn => {
-      const t1 = `${conn.from.componentId}:${conn.from.terminalId}`;
-      const t2 = `${conn.to.componentId}:${conn.to.terminalId}`;
-      uf.union(t1, t2);
+      if (conn.to?.isHanging) return;
+      if (conn.from?.componentId && conn.to?.componentId) {
+        const t1 = `${conn.from.componentId}:${conn.from.terminalId}`;
+        const t2 = `${conn.to.componentId}:${conn.to.terminalId}`;
+        uf.union(t1, t2);
+      }
     });
 
     // Closed switches connect their terminals directly into the same net
@@ -161,6 +179,19 @@ export class SimulationEngine {
       if (comp.type === "switch_spst" && comp.properties.isClosed) {
         if (comp.terminals.length >= 2) {
           uf.union(`${comp.id}:${comp.terminals[0].id}`, `${comp.id}:${comp.terminals[1].id}`);
+        }
+      } else if (comp.type === "multimeter" && comp.properties.mode === "A_DC") {
+        // Ammeter internal shunt connects the two measured nodes in series
+        let tCom = `${comp.id}:term_com`;
+        let tVwma = `${comp.id}:term_vwma`;
+        if (comp.properties.probes?.com?.attachedTo) {
+          tCom = `${comp.properties.probes.com.attachedTo.compId}:${comp.properties.probes.com.attachedTo.termId}`;
+        }
+        if (comp.properties.probes?.vwma?.attachedTo) {
+          tVwma = `${comp.properties.probes.vwma.attachedTo.compId}:${comp.properties.probes.vwma.attachedTo.termId}`;
+        }
+        if (tCom && tVwma && tCom !== tVwma) {
+          uf.union(tCom, tVwma);
         }
       }
     });
@@ -185,11 +216,24 @@ export class SimulationEngine {
     // Direct short circuit between probes
     if (rootA === rootB) return 0;
 
-    // Collect all active unique nets
+    // Collect all active unique nets across all components and connections
     const allRootsSet = new Set();
+    components.forEach(c => {
+      if (c.terminals) {
+        c.terminals.forEach(t => allRootsSet.add(uf.find(`${c.id}:${t.id}`)));
+      }
+      if (c.type === "multimeter" && c.properties.probes) {
+        if (c.properties.probes.com?.attachedTo) {
+          allRootsSet.add(uf.find(`${c.properties.probes.com.attachedTo.compId}:${c.properties.probes.com.attachedTo.termId}`));
+        }
+        if (c.properties.probes.vwma?.attachedTo) {
+          allRootsSet.add(uf.find(`${c.properties.probes.vwma.attachedTo.compId}:${c.properties.probes.vwma.attachedTo.termId}`));
+        }
+      }
+    });
     connections.forEach(c => {
-      allRootsSet.add(uf.find(`${c.from.componentId}:${c.from.terminalId}`));
-      allRootsSet.add(uf.find(`${c.to.componentId}:${c.to.terminalId}`));
+      if (c.from?.componentId && c.from?.terminalId) allRootsSet.add(uf.find(`${c.from.componentId}:${c.from.terminalId}`));
+      if (!c.to?.isHanging && c.to?.componentId && c.to?.terminalId) allRootsSet.add(uf.find(`${c.to.componentId}:${c.to.terminalId}`));
     });
     allRootsSet.add(rootA);
     allRootsSet.add(rootB);
@@ -204,8 +248,30 @@ export class SimulationEngine {
 
     // Fill Conductance Matrix G for all resistive components
     components.forEach(c => {
-      if (["resistor", "lamp", "led", "motor_dc", "diode"].includes(c.type)) {
-        if (c.terminals.length >= 2) {
+      if (["resistor", "lamp", "led", "motor_dc", "diode", "multimeter"].includes(c.type)) {
+        if (c.type === "multimeter") {
+          if (c.properties.mode === "A_DC") {
+            let tCom = `${c.id}:term_com`;
+            let tVwma = `${c.id}:term_vwma`;
+            if (c.properties.probes?.com?.attachedTo) {
+              tCom = `${c.properties.probes.com.attachedTo.compId}:${c.properties.probes.com.attachedTo.termId}`;
+            }
+            if (c.properties.probes?.vwma?.attachedTo) {
+              tVwma = `${c.properties.probes.vwma.attachedTo.compId}:${c.properties.probes.vwma.attachedTo.termId}`;
+            }
+            const u = rootToIndex.get(uf.find(tCom));
+            const v = rootToIndex.get(uf.find(tVwma));
+            if (u !== undefined && v !== undefined && u !== v) {
+              const g = 1000; // 0.001 ohm ideal ammeter shunt
+              G[u][u] += g;
+              G[v][v] += g;
+              G[u][v] -= g;
+              G[v][u] -= g;
+              adj[u].push(v);
+              adj[v].push(u);
+            }
+          }
+        } else if (c.terminals.length >= 2) {
           const u = rootToIndex.get(uf.find(`${c.id}:${c.terminals[0].id}`));
           const v = rootToIndex.get(uf.find(`${c.id}:${c.terminals[1].id}`));
 
@@ -232,6 +298,8 @@ export class SimulationEngine {
 
     const idxA = rootToIndex.get(rootA);
     const idxB = rootToIndex.get(rootB);
+
+    if (idxA === undefined || idxB === undefined) return Infinity;
 
     // BFS Check: Is there an electrical path between probe A and probe B?
     const visited = new Set();
@@ -293,30 +361,60 @@ export class SimulationEngine {
 
     meters.forEach(m => {
       const mode = m.properties.mode || "V_DC";
-      const termVwma = `${m.id}:term_vwma`;
-      const termCom = `${m.id}:term_com`;
+
+      // Determine effective measurement terminal for VΩmA probe (Red)
+      let termVwma = `${m.id}:term_vwma`;
+      let isVwmaAttached = false;
+      if (m.properties.probes?.vwma?.attachedTo) {
+        termVwma = `${m.properties.probes.vwma.attachedTo.compId}:${m.properties.probes.vwma.attachedTo.termId}`;
+        isVwmaAttached = true;
+      }
+
+      // Determine effective measurement terminal for COM probe (Black)
+      let termCom = `${m.id}:term_com`;
+      let isComAttached = false;
+      if (m.properties.probes?.com?.attachedTo) {
+        termCom = `${m.properties.probes.com.attachedTo.compId}:${m.properties.probes.com.attachedTo.termId}`;
+        isComAttached = true;
+      }
+
+      // Check if probes are connected via wires to circuit if not attached interactively
+      const isVwmaWired = connections.some(c => (c.from?.componentId === m.id && c.from?.terminalId === "term_vwma") || (c.to?.componentId === m.id && c.to?.terminalId === "term_vwma"));
+      const isComWired = connections.some(c => (c.from?.componentId === m.id && c.from?.terminalId === "term_com") || (c.to?.componentId === m.id && c.to?.terminalId === "term_com"));
+
+      const hasValidVwma = isVwmaAttached || isVwmaWired;
+      const hasValidCom = isComAttached || isComWired;
 
       let readingText = "0.00";
 
       if (mode === "OHM") {
-        // Measure exact equivalent resistance between Red and Black probes
-        const req = this.calculateEquivalentResistance(termVwma, termCom, components, connections);
-
-        if (!isFinite(req) || req > 1e7) {
-          readingText = "O.L"; // Overload / Open Circuit
-        } else if (req < 0.05) {
-          readingText = "0.00";
-        } else if (req < 1000) {
-          // Format with up to 3 decimal places if decimal, e.g. 663.88 or 193.88
-          readingText = req % 1 === 0 ? req.toFixed(1) : req.toFixed(2);
-          if (readingText.endsWith(".00")) readingText = req.toFixed(1);
-        } else if (req < 1e6) {
-          readingText = (req / 1000).toFixed(2) + " k";
+        if (!hasValidVwma || !hasValidCom) {
+          readingText = "O.L"; // Open circuit / Probes floating in air
+        } else if (termVwma === termCom) {
+          readingText = "0.00"; // Shorted probes / same terminal
         } else {
-          readingText = (req / 1e6).toFixed(2) + " M";
+          // Measure exact equivalent resistance between Red and Black probes
+          const req = this.calculateEquivalentResistance(termVwma, termCom, components, connections);
+
+          if (!isFinite(req) || req > 1e7) {
+            readingText = "O.L"; // Overload / Open Circuit
+          } else if (req < 0.05) {
+            readingText = "0.00";
+          } else if (req < 1000) {
+            readingText = req % 1 === 0 ? req.toFixed(1) : req.toFixed(2);
+            if (readingText.endsWith(".00")) readingText = req.toFixed(1);
+          } else if (req < 1e6) {
+            readingText = (req / 1000).toFixed(2) + " k";
+          } else {
+            readingText = (req / 1e6).toFixed(2) + " M";
+          }
         }
       } else if (mode === "V_DC") {
-        if (circuitResult && circuitResult.nodeVoltages) {
+        if (!hasValidVwma || !hasValidCom) {
+          readingText = "0.00";
+        } else if (termVwma === termCom) {
+          readingText = "0.00";
+        } else if (circuitResult && circuitResult.nodeVoltages) {
           const uf = this.buildEquipotentialNets(components, connections);
           const vA = circuitResult.nodeVoltages.get(uf.find(termVwma)) || 0;
           const vB = circuitResult.nodeVoltages.get(uf.find(termCom)) || 0;
@@ -326,8 +424,17 @@ export class SimulationEngine {
           readingText = "0.00";
         }
       } else if (mode === "A_DC") {
-        if (circuitResult && circuitResult.totalCurrent) {
-          readingText = circuitResult.totalCurrent.toFixed(2);
+        if (!hasValidVwma || !hasValidCom) {
+          readingText = "0.00";
+        } else if (circuitResult && circuitResult.totalCurrent) {
+          const currentVal = circuitResult.totalCurrent;
+          if (currentVal >= 1.0) {
+            readingText = currentVal.toFixed(2);
+          } else if (currentVal > 0) {
+            readingText = currentVal.toFixed(3);
+          } else {
+            readingText = "0.00";
+          }
         } else {
           readingText = "0.00";
         }

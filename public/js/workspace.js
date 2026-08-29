@@ -48,6 +48,8 @@ export class WorkspaceEngine {
 
     // Pan on background drag
     this.container.addEventListener("pointerdown", (e) => {
+      if (this.connectionEngine?.isConnecting) return;
+
       if (
         e.target === this.container ||
         e.target === this.canvas ||
@@ -57,7 +59,7 @@ export class WorkspaceEngine {
         this.isPanning = true;
         this.startX = e.clientX - this.panX;
         this.startY = e.clientY - this.panY;
-        this.container.setPointerCapture(e.pointerId);
+        try { this.container.setPointerCapture(e.pointerId); } catch (err) {}
         
         stateManager.setSelection(null, null);
       }
@@ -71,12 +73,16 @@ export class WorkspaceEngine {
       }
     });
 
-    window.addEventListener("pointerup", (e) => {
+    const onPanEnd = (e) => {
       if (this.isPanning) {
         this.isPanning = false;
+        try { this.container.releasePointerCapture(e.pointerId); } catch (err) {}
         stateManager.setWorkspaceTransform(this.panX, this.panY, this.zoom);
       }
-    });
+    };
+
+    window.addEventListener("pointerup", onPanEnd);
+    window.addEventListener("pointercancel", onPanEnd);
 
     // Zoom on wheel relative to cursor point
     this.container.addEventListener("wheel", (e) => {

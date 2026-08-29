@@ -15,6 +15,9 @@ class AdminReportSubmissionController extends Controller
      */
     public function index(Request $request): View
     {
+        // Auto-expire permohonan edit yang telah melewati deadline secara real-time
+        ReportSubmission::expireOverdueRequests();
+
         $statusFilter = $request->query('status', 'all');
         $search = $request->query('search');
 
@@ -26,6 +29,8 @@ class AdminReportSubmissionController extends Controller
             $query->where('status', 'submitted');
         } elseif ($statusFilter === 'graded') {
             $query->where('status', 'graded');
+        } elseif ($statusFilter === 'requested') {
+            $query->where('edit_request_status', 'requested');
         }
 
         // Filter search (Nama, NIM, Judul File)
@@ -45,6 +50,7 @@ class AdminReportSubmissionController extends Controller
         $totalCount = ReportSubmission::count();
         $submittedCount = ReportSubmission::where('status', 'submitted')->count();
         $gradedCount = ReportSubmission::where('status', 'graded')->count();
+        $editRequestsCount = ReportSubmission::where('edit_request_status', 'requested')->count();
 
         return view('admin.laporan.index', compact(
             'submissions',
@@ -52,7 +58,8 @@ class AdminReportSubmissionController extends Controller
             'search',
             'totalCount',
             'submittedCount',
-            'gradedCount'
+            'gradedCount',
+            'editRequestsCount'
         ));
     }
 
@@ -61,8 +68,12 @@ class AdminReportSubmissionController extends Controller
      */
     public function show(int $id): View
     {
+        ReportSubmission::expireOverdueRequests();
+
         $submission = ReportSubmission::with(['user', 'reportable', 'gradedByTeacher'])
             ->findOrFail($id);
+
+        $submission->checkAndExpireEditRequest();
 
         return view('admin.laporan.show', compact('submission'));
     }
@@ -88,11 +99,72 @@ class AdminReportSubmissionController extends Controller
             'grade' => $request->grade,
             'teacher_feedback' => $request->teacher_feedback,
             'status' => 'graded',
+            'edit_request_status' => 'none', // Reset status edit saat sudah dinilai
             'graded_by' => Auth::id(),
             'graded_at' => now(),
         ]);
 
         return redirect()->route('admin.laporan.show', $id)
             ->with('success', "Penilaian untuk {$submission->user->name} berhasil disimpan!");
+    }
+
+    /**
+     * Setujui permohonan edit laporan dan tetapkan batas waktu (deadline).
+     */
+    public function approveEdit(Request $request, int $id): RedirectResponse
+    {
+        $request->validate([
+            'edit_deadline' => ['required', 'date', 'after:now'],
+        ], [
+            'edit_deadline.required' => 'Batas waktu (deadline) upload ulang wajib ditentukan.',
+            'edit_deadline.date' => 'Format tanggal batas waktu tidak valid.',
+            'edit_deadline.after' => 'Batas waktu harus merupakan waktu di masa mendatang.',
+        ]);
+
+        $submission = ReportSubmission::findOrFail($id);
+
+        // Reset nilai menjadi NULL dan update status permohonan edit
+        $submission->update([
+            'edit_request_status' => 'approved',
+            'edit_deadline' => $request->edit_deadline,
+            'grade' => null,
+            'graded_at' => null,
+            'graded_by' => null,
+        ]);
+
+        return redirect()->route('admin.laporan.show', $id)
+            ->with('success', "Permintaan edit untuk {$submission->user->name} disetujui! Batas waktu upload ulang telah ditetapkan hingga " . \Carbon\Carbon::parse($request->edit_deadline)->translatedFormat('d M Y, H:i') . " WIB.");
+    }
+
+    /**
+     * Tolak permohonan edit laporan.
+     */
+    public function rejectEdit(Request $request, int $id): RedirectResponse
+    {
+        $submission = ReportSubmission::findOrFail($id);
+
+        $submission->update([
+            'edit_request_status' => 'rejected',
+            'edit_deadline' => null,
+        ]);
+
+        return redirect()->route('admin.laporan.show', $id)
+            ->with('success', "Permintaan izin edit untuk {$submission->user->name} telah ditolak.");
+    }
+
+    /**
+     * Soft delete laporan mahasiswa (khusus Admin).
+     * Berkas fisik tetap disimpan di storage sebagai arsip/backup.
+     */
+    public function destroy(int $id): RedirectResponse
+    {
+        $submission = ReportSubmission::findOrFail($id);
+        $studentName = $submission->user->name ?? 'Mahasiswa';
+        $reportTitle = $submission->reportable->title ?? 'Praktikum';
+
+        $submission->delete();
+
+        return redirect()->route('admin.laporan.index')
+            ->with('success', "Laporan {$reportTitle} milik {$studentName} berhasil dihapus.");
     }
 }

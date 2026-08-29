@@ -21,6 +21,15 @@ class AdminModuleController extends Controller
     }
 
     /**
+     * Tampilkan daftar modul pembelajaran versi mahasiswa di dalam layout admin.
+     */
+    public function studentView(): View
+    {
+        $modules = Module::orderBy('module_number', 'asc')->get();
+        return view('admin.modules.student-view', compact('modules'));
+    }
+
+    /**
      * Tampilkan form pembuatan modul baru.
      */
     public function create(): View

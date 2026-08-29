@@ -4,12 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="csrf-token" content="{{ csrf_token() }}">
-  <title>@yield('title', 'Panel Admin') — DTE VirtualLab</title>
+  <title>@yield('title', 'Panel Admin') — Fluxus</title>
 
-  <!-- Google Fonts Poppins & JetBrains Mono -->
+  <!-- Google Fonts: Space Grotesk, Inter, & JetBrains Mono -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 
   <!-- Core Design Tokens & Admin Dashboard Styles -->
   <link rel="stylesheet" href="{{ asset('css/variables.css') }}">
@@ -24,11 +24,11 @@
     <aside class="admin-sidebar" id="adminSidebar">
       <!-- Sidebar Header -->
       <div class="admin-sidebar-header">
-        <a href="{{ route('beranda') }}" class="admin-brand" title="Beranda DTE VirtualLab">
+        <a href="{{ route('beranda') }}" class="admin-brand" title="Beranda Fluxus">
           <img src="{{ asset('assets/logo.png') }}" alt="Logo" class="admin-brand-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block';">
           <span style="display:none; color: #facc15; font-size: 1.3rem;">⚡</span>
           <div class="admin-brand-text">
-            <span class="admin-brand-name">DTE VirtualLab</span>
+            <span class="admin-brand-name">Fluxus</span>
             <span class="admin-badge-role">PANEL ADMIN</span>
           </div>
         </a>
@@ -48,8 +48,8 @@
             <span>Kelola Modul</span>
           </a>
 
-          <!-- Progress Siswa -->
-          <a href="{{ route('dashboard.progress') }}" onclick="toggleAdminSidebar(false)" class="admin-nav-link {{ request()->routeIs('dashboard.progress') ? 'active' : '' }}">
+          <!-- Daftar Modul Siswa (Tampilan Mahasiswa di Admin) -->
+          <a href="{{ route('admin.student_modules.index') }}" onclick="toggleAdminSidebar(false)" class="admin-nav-link {{ request()->routeIs('admin.student_modules.*') ? 'active' : '' }}">
             <svg class="nav-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="18" y1="20" x2="18" y2="10"></line>
               <line x1="12" y1="20" x2="12" y2="4"></line>
@@ -78,14 +78,17 @@
         </nav>
       </div>
 
-      <!-- Sidebar Footer (Switch to Student View) -->
+      <!-- Sidebar Footer (Clickable Admin Profile Area) -->
       <div class="admin-sidebar-footer">
-        <a href="{{ route('materi') }}" onclick="toggleAdminSidebar(false)" class="admin-footer-link" title="Beralih ke tampilan materi pembelajaran siswa">
-          <svg class="nav-svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
-            <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
-          </svg>
-          <span>🎓 Lihat sebagai Mahasiswa</span>
+        <a href="{{ route('profile.edit') }}" onclick="toggleAdminSidebar(false)" style="display: flex; align-items: center; gap: 10px; text-decoration: none; padding: 8px 10px; border-radius: 8px; background: rgba(15, 23, 42, 0.5); border: 1px solid #334155; transition: all 0.15s;" onmouseover="this.style.background='#1e293b'; this.style.borderColor='#0284c7'" onmouseout="this.style.background='rgba(15, 23, 42, 0.5)'; this.style.borderColor='#334155'" title="Buka Pengaturan Profil Admin">
+          <div class="user-avatar-circle" style="width: 34px; height: 34px; font-size: 0.85rem; flex-shrink: 0; background: linear-gradient(135deg, #0284c7, #38bdf8); color: #ffffff; font-weight: 700; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+            {{ strtoupper(substr(Auth::user()->name ?? 'A', 0, 1)) }}
+          </div>
+          <div style="min-width: 0; flex: 1;">
+            <div style="font-size: 0.84rem; font-weight: 700; color: #f8fafc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ Auth::user()->name }}</div>
+            <div style="font-size: 0.72rem; color: #94a3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ Auth::user()->email }}</div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
         </a>
       </div>
     </aside>

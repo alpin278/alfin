@@ -43,6 +43,28 @@ export function calculateResistorBands(resistance) {
   return { b1Hex, b2Hex, b3Hex, b4Hex };
 }
 
+/**
+ * Calculates the exact rotated world coordinate for any port or relative point on a component
+ */
+export function getRotatedPosition(originX, originY, width, height, relX, relY, rotation = 0) {
+  const cx = width / 2;
+  const cy = height / 2;
+  const dx = relX - cx;
+  const dy = relY - cy;
+
+  const rad = (rotation * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+
+  const rotX = dx * cos - dy * sin;
+  const rotY = dx * sin + dy * cos;
+
+  return {
+    x: Math.round(originX + cx + rotX),
+    y: Math.round(originY + cy + rotY)
+  };
+}
+
 export const COMPONENT_PROTOTYPES = {
   battery: {
     type: "battery",
@@ -108,12 +130,12 @@ export const COMPONENT_PROTOTYPES = {
     type: "multimeter",
     name: "Multimeter Digital",
     icon: "📟",
-    width: 140,
-    height: 125,
+    width: 132,
+    height: 262,
     defaultProps: { mode: "V_DC", reading: "0.00 V" },
     terminals: [
-      { id: "term_com", name: "COM", label: "COM (Hitam)", relX: 35, relY: 110, color: "#0f172a" },
-      { id: "term_vwma", name: "VΩ", label: "VΩ (Merah)", relX: 105, relY: 110, color: "#ef4444" }
+      { id: "term_com", name: "COM", label: "Probe COM (Hitam / Ground)", relX: 28, relY: 245, color: "#0f172a" },
+      { id: "term_vwma", name: "VΩ", label: "Probe VΩmA (Merah / +)", relX: 104, relY: 245, color: "#ef4444" }
     ]
   },
   motor_dc: {
@@ -160,10 +182,21 @@ export class ComponentEngine {
     this.bindWorkspaceDropEvents();
     this.bindKeyboardEvents();
 
-    stateManager.subscribe("components", () => this.syncDOM());
+    stateManager.subscribe("components", () => {
+      this.syncDOM();
+      this.updateFloatingToolbarPosition();
+      this.updateAllMultimeterProbes();
+    });
+    stateManager.subscribe("components_moving", () => {
+      this.updateFloatingToolbarPosition();
+      this.updateAllMultimeterProbes();
+    });
     stateManager.subscribe("selection", () => {
       this.updateSelectionVisuals();
       this.renderFloatingToolbar();
+    });
+    stateManager.subscribe("connections", () => {
+      this.updateAllMultimeterProbes();
     });
   }
 
@@ -254,6 +287,11 @@ export class ComponentEngine {
   }
 
   createComponent(type, x, y) {
+    // Batalkan kabel in-progress jika user sedang mode menyambung saat menambah komponen baru
+    if (this.workspace?.connectionEngine?.isConnecting) {
+      this.workspace.connectionEngine.cancelConnecting();
+    }
+
     const proto = COMPONENT_PROTOTYPES[type];
     if (!proto) return;
 
@@ -271,6 +309,13 @@ export class ComponentEngine {
       terminals: JSON.parse(JSON.stringify(proto.terminals))
     };
 
+    if (type === "multimeter") {
+      newComponent.properties.probes = {
+        com: { attachedTo: null, isPlaced: false },
+        vwma: { attachedTo: null, isPlaced: false }
+      };
+    }
+
     stateManager.addComponent(newComponent);
   }
 
@@ -280,6 +325,7 @@ export class ComponentEngine {
     const state = stateManager.getState();
     const existingIds = new Set();
 
+    // 1. Sync Component Bodies
     state.components.forEach((comp) => {
       existingIds.add(`comp-${comp.id}`);
       let el = document.getElementById(`comp-${comp.id}`);
@@ -297,6 +343,74 @@ export class ComponentEngine {
       if (!existingIds.has(el.id)) {
         el.remove();
       }
+    });
+
+    // 2. Sync Multimeter Probes & Wires (Decoupled at Canvas Level)
+    const svgLayer = document.getElementById("svg-cable-layer");
+    let meterProbesGroup = document.getElementById("meter-probes-wires-group");
+    if (!meterProbesGroup && svgLayer) {
+      meterProbesGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      meterProbesGroup.setAttribute("id", "meter-probes-wires-group");
+      svgLayer.appendChild(meterProbesGroup);
+    }
+
+    const multimeters = state.components.filter(c => c.type === "multimeter");
+    const activeMeterIds = new Set(multimeters.map(m => m.id));
+
+    // Remove orphaned probe elements & wires
+    this.layer.querySelectorAll(".probe-assembly").forEach(el => {
+      const compId = el.getAttribute("data-comp-id");
+      if (!activeMeterIds.has(compId)) {
+        el.remove();
+      }
+    });
+
+    if (meterProbesGroup) {
+      meterProbesGroup.querySelectorAll(".meter-probe-wire").forEach(el => {
+        const compId = el.getAttribute("data-comp-id");
+        if (!activeMeterIds.has(compId)) {
+          el.remove();
+        }
+      });
+    }
+
+    // Ensure probe elements & wires exist and are updated
+    multimeters.forEach(comp => {
+      if (!document.getElementById(`probe-com-${comp.id}`)) {
+        const comEl = this.createProbeElement(comp, "com");
+        this.layer.appendChild(comEl);
+      }
+      if (!document.getElementById(`probe-vwma-${comp.id}`)) {
+        const vwmaEl = this.createProbeElement(comp, "vwma");
+        this.layer.appendChild(vwmaEl);
+      }
+
+      if (meterProbesGroup) {
+        if (!document.getElementById(`meter-wire-com-${comp.id}`)) {
+          const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          path.setAttribute("id", `meter-wire-com-${comp.id}`);
+          path.setAttribute("class", "meter-probe-wire probe-wire-black");
+          path.setAttribute("data-comp-id", comp.id);
+          path.setAttribute("fill", "none");
+          path.setAttribute("stroke", "#0f172a");
+          path.setAttribute("stroke-width", "4.5");
+          path.setAttribute("stroke-linecap", "round");
+          meterProbesGroup.appendChild(path);
+        }
+        if (!document.getElementById(`meter-wire-vwma-${comp.id}`)) {
+          const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          path.setAttribute("id", `meter-wire-vwma-${comp.id}`);
+          path.setAttribute("class", "meter-probe-wire probe-wire-red");
+          path.setAttribute("data-comp-id", comp.id);
+          path.setAttribute("fill", "none");
+          path.setAttribute("stroke", "#dc2626");
+          path.setAttribute("stroke-width", "4.5");
+          path.setAttribute("stroke-linecap", "round");
+          meterProbesGroup.appendChild(path);
+        }
+      }
+
+      this.updateMultimeterProbeVisuals(comp);
     });
 
     this.renderFloatingToolbar();
@@ -320,22 +434,79 @@ export class ComponentEngine {
 
     el.innerHTML = this.getComponentInnerHTML(comp);
 
-    comp.terminals.forEach((term) => {
-      const termEl = document.createElement("div");
-      termEl.className = "terminal-node";
-      termEl.id = `term-${comp.id}-${term.id}`;
-      termEl.setAttribute("data-comp-id", comp.id);
-      termEl.setAttribute("data-term-id", term.id);
-      termEl.style.left = `${term.relX}px`;
-      termEl.style.top = `${term.relY}px`;
-      termEl.title = `${comp.name}: ${term.label}`;
-      el.appendChild(termEl);
-    });
+    if (comp.type !== "multimeter") {
+      comp.terminals.forEach((term) => {
+        const termEl = document.createElement("div");
+        termEl.className = "terminal-node";
+        termEl.id = `term-${comp.id}-${term.id}`;
+        termEl.setAttribute("data-comp-id", comp.id);
+        termEl.setAttribute("data-term-id", term.id);
+        termEl.style.left = `${term.relX}px`;
+        termEl.style.top = `${term.relY}px`;
+        termEl.title = `${comp.name}: ${term.label}`;
+        el.appendChild(termEl);
+      });
+    } else {
+      // Dedicated Multimeter Controls (Mode button, Range button, Dial clicks)
+      const modeBtn = el.querySelector(".meter-function-row .meter-chip-btn:nth-child(3)");
+      const rangeBtn = el.querySelector(".meter-function-row .meter-chip-btn:nth-child(4)");
+      const dialEl = el.querySelector(".meter-rotary-knob");
+      const labelV = el.querySelector(".label-v");
+      const labelOhm = el.querySelector(".label-ohm");
+      const labelA = el.querySelector(".label-a");
+
+      const cycleMultimeterMode = (e) => {
+        e.stopPropagation();
+        if (e.cancelable) e.preventDefault();
+        const modes = ["V_DC", "OHM", "A_DC"];
+        const curr = comp.properties.mode || "V_DC";
+        const nextMode = modes[(modes.indexOf(curr) + 1) % modes.length];
+        comp.properties.mode = nextMode;
+        this.updateComponentVisualProperties(el, comp);
+        stateManager.updateComponentProperty(comp.id, "mode", nextMode);
+        stateManager.notify("simulation");
+      };
+
+      if (modeBtn) modeBtn.addEventListener("click", cycleMultimeterMode);
+      if (rangeBtn) rangeBtn.addEventListener("click", cycleMultimeterMode);
+      if (dialEl) dialEl.addEventListener("click", cycleMultimeterMode);
+
+      if (labelV) {
+        labelV.addEventListener("click", (e) => {
+          e.stopPropagation();
+          comp.properties.mode = "V_DC";
+          this.updateComponentVisualProperties(el, comp);
+          stateManager.updateComponentProperty(comp.id, "mode", "V_DC");
+          stateManager.notify("simulation");
+        });
+      }
+      if (labelOhm) {
+        labelOhm.addEventListener("click", (e) => {
+          e.stopPropagation();
+          comp.properties.mode = "OHM";
+          this.updateComponentVisualProperties(el, comp);
+          stateManager.updateComponentProperty(comp.id, "mode", "OHM");
+          stateManager.notify("simulation");
+        });
+      }
+      if (labelA) {
+        labelA.addEventListener("click", (e) => {
+          e.stopPropagation();
+          comp.properties.mode = "A_DC";
+          this.updateComponentVisualProperties(el, comp);
+          stateManager.updateComponentProperty(comp.id, "mode", "A_DC");
+          stateManager.notify("simulation");
+        });
+      }
+    }
 
     this.bindComponentDrag(el, comp);
 
-    el.addEventListener("dblclick", (e) => {
-      e.stopPropagation();
+    const handleComponentModal = (e) => {
+      if (e) {
+        e.stopPropagation();
+        if (e.cancelable) e.preventDefault();
+      }
       if (comp.type === "resistor") {
         this.openResistorModal(comp);
       } else if (comp.type === "battery") {
@@ -349,7 +520,32 @@ export class ComponentEngine {
       } else if (comp.type === "diode") {
         this.openDiodeModal(comp);
       }
-    });
+    };
+
+    // 1. Desktop: event dblclick
+    el.addEventListener("dblclick", handleComponentModal);
+
+    // 2. iOS Safari: Cegah double-tap to zoom pada touchstart ke-2
+    let lastCompTouchStart = 0;
+    el.addEventListener("touchstart", (e) => {
+      const now = Date.now();
+      if (now - lastCompTouchStart < 300) {
+        if (e.cancelable) e.preventDefault();
+      }
+      lastCompTouchStart = now;
+    }, { passive: false });
+
+    // 3. Mobile / Touchscreen: deteksi double-tap manual via touchend
+    let lastCompTap = 0;
+    el.addEventListener("touchend", (e) => {
+      const currentTime = Date.now();
+      const tapGap = currentTime - lastCompTap;
+      if (tapGap < 300 && tapGap > 0) {
+        if (e.cancelable) e.preventDefault();
+        handleComponentModal(e);
+      }
+      lastCompTap = currentTime;
+    }, { passive: false });
 
     return el;
   }
@@ -418,32 +614,106 @@ export class ComponentEngine {
         </div>
       `;
     } else if (comp.type === "multimeter") {
+      const mode = comp.properties.mode || "V_DC";
+      const unit = mode === "OHM" ? "Ω" : (mode === "A_DC" ? "A" : "V");
+      const modeBadge = mode === "OHM" ? "Ω" : "DC";
+      let dialAngle = -45;
+      if (mode === "OHM") dialAngle = 0;
+      else if (mode === "A_DC") dialAngle = 45;
+
       return `
-        <div class="multimeter-visual">
-          <div class="meter-comp-lcd">
-            <span class="meter-comp-val" id="meter-val-${comp.id}">${comp.properties.reading || '0.00'}</span>
-            <span class="meter-comp-unit" id="meter-unit-${comp.id}">${comp.properties.mode === 'OHM' ? 'Ω' : (comp.properties.mode === 'A_DC' ? 'A' : 'V')}</span>
-          </div>
-          <div class="meter-comp-dial">
-            <div class="dial-knob">
-              <div class="dial-notch"></div>
+        <div class="multimeter-visual fluke-179-style dark-edition">
+          <!-- Main Vertical Handheld Casing with Yellow Holster Bumper -->
+          <div class="meter-casing-vertical">
+            <!-- Top Header Branding -->
+            <div class="meter-header">
+              <span class="meter-brand-badge">FLUXUS</span>
+              <span class="meter-model-text">FL-179 TRUE RMS</span>
             </div>
-          </div>
-          <div class="meter-comp-jacks">
-            <div class="meter-jack-socket jack-black">
-              <span class="jack-label">COM</span>
-              <div class="probe-wire-lead probe-black-lead">
-                <div class="probe-pin-handle handle-black"></div>
+
+            <!-- Authentic Light Fluke STN LCD Screen -->
+            <div class="meter-lcd-bezel">
+              <div class="meter-lcd-screen-light">
+                <div class="meter-lcd-top-bar">
+                  <span class="lcd-badge-auto">AUTO</span>
+                  <span class="lcd-badge-mode" id="meter-mode-badge-${comp.id}">${modeBadge}</span>
+                  <span class="lcd-badge-rms">True RMS</span>
+                </div>
+                <div class="meter-lcd-main-light">
+                  <span class="meter-comp-val" id="meter-val-${comp.id}">${comp.properties.reading || '0.00'}</span>
+                  <span class="meter-comp-unit" id="meter-unit-${comp.id}">${unit}</span>
+                </div>
+                <div class="meter-lcd-bar-graph">
+                  <div class="lcd-bar-scale">
+                    <span>0</span>
+                    <span>30</span>
+                    <span>60</span>
+                  </div>
+                  <div class="lcd-bar-track">
+                    <div class="lcd-bar-fill" id="meter-bargraph-${comp.id}"></div>
+                  </div>
+                </div>
               </div>
             </div>
-            <div class="meter-jack-socket jack-red">
-              <span class="jack-label">VΩmA</span>
-              <div class="probe-wire-lead probe-red-lead">
-                <div class="probe-pin-handle handle-red"></div>
+
+            <!-- Function Push Buttons Bar (Red Power Button + Function Keys) -->
+            <div class="meter-function-row">
+              <span class="meter-power-btn" title="Power">⏻</span>
+              <span class="meter-chip-btn">HOLD</span>
+              <span class="meter-chip-btn">MODE</span>
+              <span class="meter-chip-btn">RANGE</span>
+            </div>
+
+            <!-- Center Rotary Selector Dial Section with Detailed Scale -->
+            <div class="meter-dial-section">
+              <!-- Radial Markings around Dial -->
+              <div class="meter-dial-label label-v ${mode === 'V_DC' ? 'active' : ''}">V⎓</div>
+              <div class="meter-dial-label label-vac">V~</div>
+              <div class="meter-dial-label label-ohm ${mode === 'OHM' ? 'active' : ''}">Ω</div>
+              <div class="meter-dial-label label-cont">·)))</div>
+              <div class="meter-dial-label label-a ${mode === 'A_DC' ? 'active' : ''}">A⎓</div>
+              <div class="meter-dial-label label-aac">A~</div>
+
+              <div class="meter-rotary-knob" id="meter-dial-${comp.id}" style="transform: rotate(${dialAngle}deg);">
+                <div class="knob-face">
+                  <div class="knob-bar-handle">
+                    <div class="knob-pointer-arrow"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Bottom 4-Port Jack Panel (COM, V/Ω, mA, 10A) with Yellow Accents -->
+            <div class="meter-jacks-panel">
+              <div class="meter-banana-jack jack-10a">
+                <div class="jack-socket-rim">
+                  <div class="jack-socket-hole"></div>
+                </div>
+                <span class="jack-name">10A</span>
+              </div>
+
+              <div class="meter-banana-jack jack-com">
+                <div class="jack-socket-rim">
+                  <div class="jack-socket-hole"></div>
+                </div>
+                <span class="jack-name">COM</span>
+              </div>
+
+              <div class="meter-banana-jack jack-vwma">
+                <div class="jack-socket-rim">
+                  <div class="jack-socket-hole"></div>
+                </div>
+                <span class="jack-name">V·Ω·mA</span>
+              </div>
+
+              <div class="meter-banana-jack jack-temp">
+                <div class="jack-socket-rim">
+                  <div class="jack-socket-hole"></div>
+                </div>
+                <span class="jack-name">mA</span>
               </div>
             </div>
           </div>
-          <div class="multimeter-label">Multimeter Digital</div>
         </div>
       `;
     } else if (comp.type === "led") {
@@ -548,18 +818,30 @@ export class ComponentEngine {
     } else if (comp.type === "multimeter") {
       const valEl = el.querySelector(`#meter-val-${comp.id}`);
       const unitEl = el.querySelector(`#meter-unit-${comp.id}`);
-      const dial = el.querySelector(".meter-comp-dial");
+      const modeBadge = el.querySelector(`#meter-mode-badge-${comp.id}`);
+      const dial = el.querySelector(`#meter-dial-${comp.id}`) || el.querySelector(".meter-rotary-knob") || el.querySelector(".meter-comp-dial");
       const mode = comp.properties.mode || "V_DC";
 
       if (valEl && comp.properties.reading) valEl.textContent = comp.properties.reading;
       if (unitEl) unitEl.textContent = mode === "OHM" ? "Ω" : (mode === "A_DC" ? "A" : "V");
+      if (modeBadge) modeBadge.textContent = mode === "OHM" ? "Ω" : "DC";
+
+      const labelV = el.querySelector(".label-v");
+      const labelOhm = el.querySelector(".label-ohm");
+      const labelA = el.querySelector(".label-a");
+      if (labelV) labelV.classList.toggle("active", mode === "V_DC");
+      if (labelOhm) labelOhm.classList.toggle("active", mode === "OHM");
+      if (labelA) labelA.classList.toggle("active", mode === "A_DC");
+
       if (dial) {
-        let angle = 0;
-        if (mode === "OHM") angle = 120;
-        else if (mode === "A_DC") angle = 240;
+        let angle = -45;
+        if (mode === "OHM") angle = 0;
+        else if (mode === "A_DC") angle = 45;
         dial.style.transform = `rotate(${angle}deg)`;
-        dial.style.transition = "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)";
+        dial.style.transition = "transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)";
       }
+
+      this.updateMultimeterProbeVisuals(comp);
     } else if (comp.type === "motor_dc") {
       const lbl = el.querySelector(`#motor-lbl-${comp.id}`);
       const rpmNum = el.querySelector(`#motor-rpm-${comp.id} .rpm-number`);
@@ -574,104 +856,89 @@ export class ComponentEngine {
         }
       }
     } else if (comp.type === "diode") {
-      const lbl = el.querySelector(`#diode-lbl-${comp.id}`);
-      const badge = el.querySelector(`#diode-bias-${comp.id}`);
-      const statusText = el.querySelector(`#diode-bias-${comp.id} .bias-status-text`);
-      const vis = el.querySelector(`#diode-vis-${comp.id}`);
+      const biasBadge = el.querySelector(`#diode-bias-${comp.id}`);
+      const biasStatus = biasBadge?.querySelector(".bias-status-text");
+      const diodeState = comp.properties.state || "IDLE";
 
-      if (lbl) lbl.textContent = `Vf: ${comp.properties.forwardVoltage || 0.7}V`;
-      const state = comp.properties.state || "STANDBY";
-      
-      if (vis) {
-        vis.classList.remove("forward-bias", "reverse-bias");
-        if (state === "FORWARD_BIAS") vis.classList.add("forward-bias");
-        if (state === "REVERSE_BIAS") vis.classList.add("reverse-bias");
-      }
-
-      if (badge && statusText) {
-        badge.className = `diode-bias-badge state-${state.toLowerCase()}`;
-        if (state === "FORWARD_BIAS") {
-          statusText.textContent = "BIAS MAJU (ON)";
-        } else if (state === "REVERSE_BIAS") {
-          statusText.textContent = "BIAS MUNDUR (BLOK)";
+      if (biasBadge && biasStatus) {
+        biasBadge.classList.remove("bias-forward", "bias-reverse", "bias-idle");
+        if (diodeState === "FORWARD") {
+          biasBadge.classList.add("bias-forward");
+          biasStatus.textContent = "FORWARD BIAS";
+        } else if (diodeState === "REVERSE") {
+          biasBadge.classList.add("bias-reverse");
+          biasStatus.textContent = "REVERSE BIAS";
         } else {
-          statusText.textContent = "STANDBY";
-        }
-      }
-    } else if (comp.type === "resistor") {
-      const bands = calculateResistorBands(comp.properties.resistance || 220);
-      const b1 = el.querySelector(".band-1");
-      const b2 = el.querySelector(".band-2");
-      const b3 = el.querySelector(".band-3");
-      const b4 = el.querySelector(".band-4");
-      const lbl = el.querySelector(`#res-lbl-${comp.id}`);
-
-      if (b1) b1.style.backgroundColor = bands.b1Hex;
-      if (b2) b2.style.backgroundColor = bands.b2Hex;
-      if (b3) b3.style.backgroundColor = bands.b3Hex;
-      if (b4) b4.style.backgroundColor = bands.b4Hex;
-      if (lbl) lbl.textContent = `${comp.properties.resistance} Ω`;
-    } else if (comp.type === "lamp") {
-      const lbl = el.querySelector(`#lamp-lbl-${comp.id}`);
-      if (lbl) lbl.textContent = `${comp.properties.powerRating}W / ${comp.properties.nominalVoltage}V`;
-    } else if (comp.type === "multimeter") {
-      const valEl = el.querySelector(`#meter-val-${comp.id}`);
-      const unitEl = el.querySelector(`#meter-unit-${comp.id}`);
-      if (valEl && comp.properties.reading) valEl.textContent = comp.properties.reading;
-      if (unitEl) unitEl.textContent = comp.properties.mode === "OHM" ? "Ω" : (comp.properties.mode === "A_DC" ? "A" : "V");
-    } else if (comp.type === "motor_dc") {
-      const lbl = el.querySelector(`#motor-lbl-${comp.id}`);
-      const rpmNum = el.querySelector(`#motor-rpm-${comp.id} .rpm-number`);
-      const rotor = el.querySelector(`#motor-rotor-${comp.id}`);
-      if (lbl) lbl.textContent = `${comp.properties.nominalVoltage}V / ${comp.properties.powerRating}W`;
-      if (rpmNum) rpmNum.textContent = comp.properties.currentRpm || 0;
-      if (rotor) {
-        if ((comp.properties.currentRpm || 0) > 0) {
-          rotor.classList.add("spinning");
-        } else {
-          rotor.classList.remove("spinning");
+          biasBadge.classList.add("bias-idle");
+          biasStatus.textContent = "STANDBY";
         }
       }
     }
   }
 
   bindComponentDrag(el, comp) {
-    let startX = 0, startY = 0;
-    let compStartX = 0, compStartY = 0;
+    let startX = 0;
+    let startY = 0;
+    let compStartX = 0;
+    let compStartY = 0;
+    let isDragging = false;
     let hasMoved = false;
+    let pointerId = null;
 
     const onPointerDown = (e) => {
-      // If we are currently drawing a wire, check if tapping this component near any of its terminals to complete connection!
+      // If clicking near a terminal in wire-connecting mode -> prioritize terminal wiring
       if (this.workspace?.connectionEngine?.isConnecting) {
-        const rawPos = this.workspace.screenToCanvas(e.clientX, e.clientY);
-        const nearTerm = this.workspace.connectionEngine.findNearestTerminalSnap(rawPos.x, rawPos.y, 45);
-        if (nearTerm) {
-          e.stopPropagation();
-          e.preventDefault();
-          this.workspace.connectionEngine.handleTerminalClick(nearTerm.compId, nearTerm.termId, nearTerm.el);
-          return;
+        const clientX = e.clientX ?? e.touches?.[0]?.clientX;
+        const clientY = e.clientY ?? e.touches?.[0]?.clientY;
+        if (clientX !== undefined && clientY !== undefined) {
+          const rawPos = this.workspace.screenToCanvas(clientX, clientY);
+          const nearTerm = this.workspace.connectionEngine.findNearestTerminalSnap(rawPos.x, rawPos.y, 45);
+          if (nearTerm) {
+            e.stopPropagation();
+            if (e.cancelable) e.preventDefault();
+            this.workspace.connectionEngine.handleTerminalClick(nearTerm.compId, nearTerm.termId, nearTerm.el);
+            return;
+          }
         }
+        this.workspace.connectionEngine.cancelConnecting();
       }
 
-      // NEVER intercept if clicking a terminal node or its smart numbering badge
-      if (e.target.closest(".terminal-node") || e.target.closest(".smart-number-badge")) {
+      // NEVER intercept if clicking a terminal node, smart numbering badge, hanging wire node, or probe assembly
+      if (e.target.closest(".terminal-node") || e.target.closest(".smart-number-badge") || e.target.closest(".hanging-wire-node") || e.target.closest(".probe-assembly")) {
         return;
       }
 
       e.stopPropagation();
+      if (e.cancelable) e.preventDefault();
+
+      pointerId = e.pointerId ?? null;
+      if (pointerId !== null && el.setPointerCapture) {
+        try { el.setPointerCapture(pointerId); } catch (err) {}
+      }
+
       stateManager.setSelection("component", comp.id);
 
-      startX = e.clientX;
-      startY = e.clientY;
+      const clientX = e.clientX ?? (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+      const clientY = e.clientY ?? (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+
+      startX = clientX;
+      startY = clientY;
       compStartX = comp.x;
       compStartY = comp.y;
       hasMoved = false;
+      isDragging = true;
 
       const onPointerMove = (moveEvent) => {
-        const deltaX = (moveEvent.clientX - startX) / this.workspace.zoom;
-        const deltaY = (moveEvent.clientY - startY) / this.workspace.zoom;
+        if (!isDragging) return;
+        if (moveEvent.cancelable) moveEvent.preventDefault();
 
-        if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) {
+        const curX = moveEvent.clientX ?? (moveEvent.touches && moveEvent.touches[0] ? moveEvent.touches[0].clientX : (moveEvent.changedTouches && moveEvent.changedTouches[0] ? moveEvent.changedTouches[0].clientX : startX));
+        const curY = moveEvent.clientY ?? (moveEvent.touches && moveEvent.touches[0] ? moveEvent.touches[0].clientY : (moveEvent.changedTouches && moveEvent.changedTouches[0] ? moveEvent.changedTouches[0].clientY : startY));
+
+        const deltaX = (curX - startX) / this.workspace.zoom;
+        const deltaY = (curY - startY) / this.workspace.zoom;
+
+        if (Math.hypot(deltaX, deltaY) > 2) {
           hasMoved = true;
         }
 
@@ -684,16 +951,33 @@ export class ComponentEngine {
           comp.x = newX;
           comp.y = newY;
 
+          this.updateFloatingToolbarPosition();
+          this.updateAllMultimeterProbes();
+
           stateManager.notify("components_moving");
         }
       };
 
-      const onPointerUp = () => {
+      const onPointerUp = (upEvent) => {
+        if (!isDragging) return;
+        isDragging = false;
+
+        if (pointerId !== null && el.releasePointerCapture) {
+          try { el.releasePointerCapture(pointerId); } catch (err) {}
+        }
+        pointerId = null;
+
         window.removeEventListener("pointermove", onPointerMove);
         window.removeEventListener("pointerup", onPointerUp);
+        window.removeEventListener("pointercancel", onPointerUp);
+        window.removeEventListener("touchmove", onPointerMove);
+        window.removeEventListener("touchend", onPointerUp);
+        window.removeEventListener("touchcancel", onPointerUp);
 
         if (hasMoved) {
           stateManager.updateComponentPosition(comp.id, comp.x, comp.y);
+          this.updateFloatingToolbarPosition();
+          this.updateAllMultimeterProbes();
         } else {
           if (comp.type === "switch_spst") {
             const nextState = !comp.properties.isClosed;
@@ -701,7 +985,6 @@ export class ComponentEngine {
             this.updateComponentVisualProperties(el, comp);
             stateManager.updateComponentProperty(comp.id, "isClosed", nextState);
           } else if (comp.type === "multimeter") {
-            // Direct Click / Tap to Cycle Multimeter Modes: V_DC -> OHM -> A_DC
             const modes = ["V_DC", "OHM", "A_DC"];
             const curr = comp.properties.mode || "V_DC";
             const nextMode = modes[(modes.indexOf(curr) + 1) % modes.length];
@@ -709,15 +992,47 @@ export class ComponentEngine {
             this.updateComponentVisualProperties(el, comp);
             stateManager.updateComponentProperty(comp.id, "mode", nextMode);
             stateManager.notify("simulation");
+            this.updateAllMultimeterProbes();
           }
         }
       };
 
-      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointermove", onPointerMove, { passive: false });
       window.addEventListener("pointerup", onPointerUp);
+      window.addEventListener("pointercancel", onPointerUp);
+      window.addEventListener("touchmove", onPointerMove, { passive: false });
+      window.addEventListener("touchend", onPointerUp);
+      window.addEventListener("touchcancel", onPointerUp);
     };
 
-    el.addEventListener("pointerdown", onPointerDown);
+    el.addEventListener("pointerdown", onPointerDown, { passive: false });
+  }
+
+  updateFloatingToolbarPosition() {
+    if (!this.floatingToolbar) return;
+    const state = stateManager.getState();
+    if (state.selection.type !== "component" || !state.selection.id) return;
+
+    const comp = state.components.find(c => c.id === state.selection.id);
+    if (!comp) return;
+
+    const rot = (comp.rotation || 0) % 360;
+    const isOrthogonal = (rot === 90 || rot === 270);
+    const effectiveHeight = isOrthogonal ? comp.width : comp.height;
+
+    const centerX = comp.x + comp.width / 2;
+    const topY = comp.y + comp.height / 2 - effectiveHeight / 2;
+
+    this.floatingToolbar.style.left = `${Math.round(centerX)}px`;
+    this.floatingToolbar.style.top = `${Math.round(topY - 12)}px`;
+  }
+
+  updateAllMultimeterProbes() {
+    const state = stateManager.getState();
+    const multimeters = state.components.filter(c => c.type === "multimeter");
+    multimeters.forEach(m => {
+      this.updateMultimeterProbeVisuals(m);
+    });
   }
 
   renderFloatingToolbar() {
@@ -732,10 +1047,17 @@ export class ComponentEngine {
     const comp = state.components.find(c => c.id === state.selection.id);
     if (!comp) return;
 
+    const rot = (comp.rotation || 0) % 360;
+    const isOrthogonal = (rot === 90 || rot === 270);
+    const effectiveHeight = isOrthogonal ? comp.width : comp.height;
+
+    const centerX = comp.x + comp.width / 2;
+    const topY = comp.y + comp.height / 2 - effectiveHeight / 2;
+
     const tb = document.createElement("div");
     tb.className = "component-floating-toolbar";
-    tb.style.left = `${comp.x + comp.width / 2}px`;
-    tb.style.top = `${comp.y - 12}px`;
+    tb.style.left = `${Math.round(centerX)}px`;
+    tb.style.top = `${Math.round(topY - 12)}px`;
 
     tb.innerHTML = `
       <button class="btn-comp-action" id="btn-comp-rotate" title="Putar 90° (Shortcut: Tombol R)">
@@ -1140,6 +1462,379 @@ export class ComponentEngine {
       stateManager.updateComponentProperty(comp.id, "forwardVoltage", vf);
       close();
     });
+  }
+
+  calculateProbeWirePath(startX, startY, endX, endY) {
+    const dx = endX - startX;
+    const dy = endY - startY;
+    const dist = Math.hypot(dx, dy);
+
+    // Natural cable sag factor based on distance
+    const sag = Math.min(80, Math.max(20, dist * 0.22));
+
+    // Control point 1: leaves the multimeter socket going straight downwards then curves
+    const cp1x = Math.round(startX + dx * 0.15);
+    const cp1y = Math.round(startY + sag + (dy > 0 ? dy * 0.15 : 0));
+
+    // Control point 2: enters the top of the probe lead collar
+    const cp2x = Math.round(endX - dx * 0.15);
+    const cp2y = Math.round(endY - sag * 0.55 + (dy < 0 ? dy * 0.15 : 0));
+
+    return `M ${startX} ${startY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${endX} ${endY}`;
+  }
+
+  createProbeElement(comp, probeKey) {
+    const isCom = probeKey === "com";
+    const label = isCom ? "COM" : "VΩ";
+    const title = isCom ? "Tarik Probe COM (Hitam) ke titik pengukuran" : "Tarik Probe VΩmA (Merah) ke titik pengukuran";
+    const colorClass = isCom ? "black" : "red";
+
+    const el = document.createElement("div");
+    el.className = `probe-assembly probe-${probeKey}-assembly`;
+    el.id = `probe-${probeKey}-${comp.id}`;
+    el.setAttribute("data-probe", probeKey);
+    el.setAttribute("data-comp-id", comp.id);
+    el.title = title;
+
+    el.innerHTML = `
+      <div class="probe-touch-hitbox"></div>
+      <div class="probe-finger-guard guard-${colorClass}"></div>
+      <div class="probe-body-collar collar-${colorClass}">
+        <span class="probe-lead-label">${label}</span>
+      </div>
+      <div class="probe-grip grip-${colorClass}"></div>
+      <div class="probe-pin-needle needle-${colorClass}"></div>
+    `;
+
+    this.bindProbeDragEvents(el, comp, probeKey);
+    return el;
+  }
+
+  bindProbeDragEvents(probeEl, comp, probeKey) {
+    let isDragging = false;
+    let hasMoved = false;
+    let activeSnap = null;
+    let currentRawPos = null;
+    let startScreenX = 0;
+    let startScreenY = 0;
+    let initialAttachedTo = null;
+
+    const getEvtCoords = (evt) => {
+      if (evt.touches && evt.touches.length > 0) {
+        return { x: evt.touches[0].clientX, y: evt.touches[0].clientY };
+      }
+      if (evt.changedTouches && evt.changedTouches.length > 0) {
+        return { x: evt.changedTouches[0].clientX, y: evt.changedTouches[0].clientY };
+      }
+      return { x: evt.clientX, y: evt.clientY };
+    };
+
+    const onPointerDown = (e) => {
+      e.stopPropagation();
+      if (e.cancelable) e.preventDefault();
+
+      isDragging = true;
+      hasMoved = false;
+      activeSnap = null;
+
+      const coords = getEvtCoords(e);
+      startScreenX = coords.x ?? 0;
+      startScreenY = coords.y ?? 0;
+
+      // Capture initial attachment state without detaching yet
+      initialAttachedTo = comp.properties.probes?.[probeKey]?.attachedTo 
+        ? { ...comp.properties.probes[probeKey].attachedTo } 
+        : null;
+
+      probeEl.classList.add("is-dragging");
+
+      const onPointerMove = (moveEvt) => {
+        if (!isDragging) return;
+        if (moveEvt.cancelable) moveEvt.preventDefault();
+
+        const moveCoords = getEvtCoords(moveEvt);
+        if (moveCoords.x === undefined || moveCoords.y === undefined) return;
+
+        const screenDist = Math.hypot(moveCoords.x - startScreenX, moveCoords.y - startScreenY);
+        if (screenDist > 5) {
+          hasMoved = true;
+        }
+
+        if (!hasMoved) return;
+
+        const rawPos = this.workspace.screenToCanvas(moveCoords.x, moveCoords.y);
+        currentRawPos = rawPos;
+
+        // If previously attached and dragged away > 10px from start:
+        if (initialAttachedTo) {
+          const oldTargetEl = document.getElementById(
+            `term-${initialAttachedTo.compId}-${initialAttachedTo.termId}`
+          );
+          if (oldTargetEl) oldTargetEl.classList.remove(`probe-attached-${probeKey}`);
+        }
+
+        // Clean up previous highlights
+        document.querySelectorAll(".terminal-node.probe-snap-highlight").forEach(t => t.classList.remove("probe-snap-highlight"));
+        document.querySelectorAll(".circuit-wire.wire-cut-preview").forEach(w => w.classList.remove("wire-cut-preview"));
+
+        // Priority 1: Terminal Pin Snap (active in ALL modes: V, OHM, and A)
+        const snap = this.workspace.connectionEngine.findNearestTerminalSnap(rawPos.x, rawPos.y, 32);
+
+        if (snap && snap.compId !== comp.id) {
+          activeSnap = snap;
+          snap.el.classList.add("probe-snap-highlight");
+          comp.properties.probes[probeKey].worldX = snap.pos.x;
+          comp.properties.probes[probeKey].worldY = snap.pos.y;
+        } else {
+          // Priority 2: Wire Junction Snap (snap directly to wire path)
+          const wireSnap = this.workspace.connectionEngine.findNearestWireSnap(rawPos.x, rawPos.y, 14);
+          if (wireSnap && !wireSnap.conn.id.includes(comp.id)) {
+            const targetEndpoint = wireSnap.conn.from?.componentId ? wireSnap.conn.from : wireSnap.conn.to;
+            if (targetEndpoint && targetEndpoint.componentId) {
+              activeSnap = {
+                compId: targetEndpoint.componentId,
+                termId: targetEndpoint.terminalId,
+                pos: wireSnap.point,
+                isWireJunction: true
+              };
+              const wireEl = document.getElementById(wireSnap.conn.id);
+              if (wireEl) wireEl.classList.add("wire-cut-preview");
+              comp.properties.probes[probeKey].worldX = wireSnap.point.x;
+              comp.properties.probes[probeKey].worldY = wireSnap.point.y;
+            } else {
+              activeSnap = null;
+              comp.properties.probes[probeKey].worldX = rawPos.x;
+              comp.properties.probes[probeKey].worldY = rawPos.y;
+            }
+          } else {
+            activeSnap = null;
+            comp.properties.probes[probeKey].worldX = rawPos.x;
+            comp.properties.probes[probeKey].worldY = rawPos.y;
+          }
+        }
+
+        comp.properties.probes[probeKey].isPlaced = true;
+        this.updateMultimeterProbeVisuals(comp);
+      };
+
+      const onPointerUp = (upEvt) => {
+        if (!isDragging) return;
+        isDragging = false;
+        probeEl.classList.remove("is-dragging");
+
+        window.removeEventListener("pointermove", onPointerMove);
+        window.removeEventListener("pointerup", onPointerUp);
+        window.removeEventListener("pointercancel", onPointerUp);
+        window.removeEventListener("mousemove", onPointerMove);
+        window.removeEventListener("mouseup", onPointerUp);
+        window.removeEventListener("touchmove", onPointerMove);
+        window.removeEventListener("touchend", onPointerUp);
+        window.removeEventListener("touchcancel", onPointerUp);
+
+        document.querySelectorAll(".terminal-node.probe-snap-highlight").forEach(t => t.classList.remove("probe-snap-highlight"));
+        document.querySelectorAll(".circuit-wire.wire-cut-preview").forEach(w => w.classList.remove("wire-cut-preview"));
+
+        // Case 1: Simple click without actual drag -> PRESERVE CURRENT ATTACHMENT STATE
+        if (!hasMoved) {
+          if (initialAttachedTo) {
+            comp.properties.probes[probeKey].attachedTo = initialAttachedTo;
+            const oldTargetEl = document.getElementById(
+              `term-${initialAttachedTo.compId}-${initialAttachedTo.termId}`
+            );
+            if (oldTargetEl) oldTargetEl.classList.add(`probe-attached-${probeKey}`);
+          }
+          this.updateMultimeterProbeVisuals(comp);
+          return;
+        }
+
+        // Case 2: Dragged and released over a valid component terminal or wire node -> CONNECTED (State 2)
+        if (activeSnap && activeSnap.compId !== comp.id) {
+          comp.properties.probes[probeKey].attachedTo = {
+            compId: activeSnap.compId,
+            termId: activeSnap.termId
+          };
+          comp.properties.probes[probeKey].worldX = activeSnap.pos.x;
+          comp.properties.probes[probeKey].worldY = activeSnap.pos.y;
+          comp.properties.probes[probeKey].isPlaced = true;
+          if (activeSnap.el) {
+            activeSnap.el.classList.add(`probe-attached-${probeKey}`);
+          }
+          this.updateMultimeterProbeVisuals(comp);
+          stateManager.updateComponentProperty(comp.id, "probes", comp.properties.probes);
+          stateManager.notify("simulation");
+        } else {
+          // Case 3: Dragged away and released in open space -> AUTO-ROLLBACK to IDLE (State 1)
+          comp.properties.probes[probeKey].attachedTo = null;
+          comp.properties.probes[probeKey].isPlaced = false;
+
+          const releasePos = currentRawPos || this.workspace.screenToCanvas(getEvtCoords(upEvt).x, getEvtCoords(upEvt).y);
+          const startX = releasePos ? releasePos.x : (comp.properties.probes[probeKey].worldX || comp.x);
+          const startY = releasePos ? releasePos.y : (comp.properties.probes[probeKey].worldY || comp.y);
+
+          delete comp.properties.probes[probeKey].worldX;
+          delete comp.properties.probes[probeKey].worldY;
+
+          stateManager.updateComponentProperty(comp.id, "probes", comp.properties.probes);
+          this.animateProbeRollback(comp, probeKey, startX, startY);
+          stateManager.notify("simulation");
+        }
+      };
+
+      window.addEventListener("pointermove", onPointerMove, { passive: false });
+      window.addEventListener("pointerup", onPointerUp);
+      window.addEventListener("pointercancel", onPointerUp);
+      window.addEventListener("mousemove", onPointerMove, { passive: false });
+      window.addEventListener("mouseup", onPointerUp);
+      window.addEventListener("touchmove", onPointerMove, { passive: false });
+      window.addEventListener("touchend", onPointerUp);
+      window.addEventListener("touchcancel", onPointerUp);
+    };
+
+    probeEl.addEventListener("pointerdown", onPointerDown, { passive: false });
+    probeEl.addEventListener("mousedown", onPointerDown, { passive: false });
+    probeEl.addEventListener("touchstart", onPointerDown, { passive: false });
+  }
+
+  /**
+   * Smoothly animates probe from its release point back to its resting dock on the multimeter body
+   */
+  animateProbeRollback(comp, probeKey, fromX, fromY) {
+    const startTime = performance.now();
+    const duration = 280; // ms
+
+    const step = (currentTime) => {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      // Cubic ease-out
+      const ease = 1 - Math.pow(1 - progress, 3);
+
+      const defaultRelX = probeKey === "com" ? 28 : 104;
+      const targetPos = getRotatedPosition(comp.x, comp.y, comp.width, comp.height, defaultRelX, 245, comp.rotation);
+
+      const curX = fromX + (targetPos.x - fromX) * ease;
+      const curY = fromY + (targetPos.y - fromY) * ease;
+
+      const probeEl = document.getElementById(`probe-${probeKey}-${comp.id}`);
+      const wireEl = document.getElementById(`meter-wire-${probeKey}-${comp.id}`);
+      const jackRelX = probeKey === "com" ? 48 : 84;
+      const jackPos = getRotatedPosition(comp.x, comp.y, comp.width, comp.height, jackRelX, 186, comp.rotation);
+
+      if (probeEl) {
+        probeEl.style.left = `${Math.round(curX)}px`;
+        probeEl.style.top = `${Math.round(curY)}px`;
+      }
+      if (wireEl) {
+        wireEl.setAttribute("d", this.calculateProbeWirePath(jackPos.x, jackPos.y, Math.round(curX), Math.round(curY) - 22));
+      }
+
+      if (progress < 1) {
+        requestAnimationFrame(step);
+      } else {
+        comp.properties.probes[probeKey].isPlaced = false;
+        comp.properties.probes[probeKey].attachedTo = null;
+        delete comp.properties.probes[probeKey].worldX;
+        delete comp.properties.probes[probeKey].worldY;
+        this.updateMultimeterProbeVisuals(comp);
+      }
+    };
+
+    requestAnimationFrame(step);
+  }
+
+  updateMultimeterProbeVisuals(comp) {
+    if (!comp || comp.type !== "multimeter") return;
+
+    if (!comp.properties.probes) {
+      comp.properties.probes = {
+        com: { attachedTo: null, isPlaced: false },
+        vwma: { attachedTo: null, isPlaced: false }
+      };
+    }
+
+    const comProbe = document.getElementById(`probe-com-${comp.id}`);
+    const vwmaProbe = document.getElementById(`probe-vwma-${comp.id}`);
+    const comWire = document.getElementById(`meter-wire-com-${comp.id}`);
+    const vwmaWire = document.getElementById(`meter-wire-vwma-${comp.id}`);
+
+    // Compute Jack World Positions (accounting for body rotation!)
+    const comJackPos = getRotatedPosition(comp.x, comp.y, comp.width, comp.height, 48, 186, comp.rotation);
+    const vwmaJackPos = getRotatedPosition(comp.x, comp.y, comp.width, comp.height, 84, 186, comp.rotation);
+
+    // Default resting positions on multimeter body (State 1: Idle)
+    const comDefaultPos = getRotatedPosition(comp.x, comp.y, comp.width, comp.height, 28, 245, comp.rotation);
+    const vwmaDefaultPos = getRotatedPosition(comp.x, comp.y, comp.width, comp.height, 104, 245, comp.rotation);
+
+    const state = stateManager.getState();
+
+    // --- COM Probe Position ---
+    let comPos = comDefaultPos;
+    if (comp.properties.probes.com?.attachedTo) {
+      // State 2: Connected to terminal
+      const targetPos = this.workspace?.connectionEngine?.getTerminalWorldPosition(
+        comp.properties.probes.com.attachedTo.compId,
+        comp.properties.probes.com.attachedTo.termId
+      );
+      if (targetPos) {
+        comPos = targetPos;
+        comp.properties.probes.com.worldX = targetPos.x;
+        comp.properties.probes.com.worldY = targetPos.y;
+      } else if (comp.properties.probes.com.worldX !== undefined && comp.properties.probes.com.worldY !== undefined) {
+        // Wire junction or preserved world coordinate
+        comPos = { x: comp.properties.probes.com.worldX, y: comp.properties.probes.com.worldY };
+      } else {
+        const targetCompExists = state.components.some(c => c.id === comp.properties.probes.com.attachedTo.compId);
+        if (!targetCompExists) {
+          comp.properties.probes.com.attachedTo = null;
+          comp.properties.probes.com.isPlaced = false;
+          comPos = comDefaultPos;
+        }
+      }
+    } else if (comp.properties.probes.com?.isPlaced && comp.properties.probes.com.worldX !== undefined) {
+      comPos = { x: comp.properties.probes.com.worldX, y: comp.properties.probes.com.worldY };
+    }
+
+    if (comProbe) {
+      comProbe.style.left = `${comPos.x}px`;
+      comProbe.style.top = `${comPos.y}px`;
+    }
+    if (comWire) {
+      comWire.setAttribute("d", this.calculateProbeWirePath(comJackPos.x, comJackPos.y, comPos.x, comPos.y - 22));
+    }
+
+    // --- VΩmA Probe Position ---
+    let vwmaPos = vwmaDefaultPos;
+    if (comp.properties.probes.vwma?.attachedTo) {
+      // State 2: Connected to terminal
+      const targetPos = this.workspace?.connectionEngine?.getTerminalWorldPosition(
+        comp.properties.probes.vwma.attachedTo.compId,
+        comp.properties.probes.vwma.attachedTo.termId
+      );
+      if (targetPos) {
+        vwmaPos = targetPos;
+        comp.properties.probes.vwma.worldX = targetPos.x;
+        comp.properties.probes.vwma.worldY = targetPos.y;
+      } else if (comp.properties.probes.vwma.worldX !== undefined && comp.properties.probes.vwma.worldY !== undefined) {
+        // Wire junction or preserved world coordinate
+        vwmaPos = { x: comp.properties.probes.vwma.worldX, y: comp.properties.probes.vwma.worldY };
+      } else {
+        const targetCompExists = state.components.some(c => c.id === comp.properties.probes.vwma.attachedTo.compId);
+        if (!targetCompExists) {
+          comp.properties.probes.vwma.attachedTo = null;
+          comp.properties.probes.vwma.isPlaced = false;
+          vwmaPos = vwmaDefaultPos;
+        }
+      }
+    } else if (comp.properties.probes.vwma?.isPlaced && comp.properties.probes.vwma.worldX !== undefined) {
+      vwmaPos = { x: comp.properties.probes.vwma.worldX, y: comp.properties.probes.vwma.worldY };
+    }
+
+    if (vwmaProbe) {
+      vwmaProbe.style.left = `${vwmaPos.x}px`;
+      vwmaProbe.style.top = `${vwmaPos.y}px`;
+    }
+    if (vwmaWire) {
+      vwmaWire.setAttribute("d", this.calculateProbeWirePath(vwmaJackPos.x, vwmaJackPos.y, vwmaPos.x, vwmaPos.y - 22));
+    }
   }
 
   updateSelectionVisuals() {

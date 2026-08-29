@@ -5,14 +5,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Virtual Laboratory Pengukuran Listrik — Media Pembelajaran Interaktif Dasar Teknik Elektro">
-  <title>DTE VirtualLab — Laboratorium Pengukuran Listrik</title>
+  <title>Fluxus — Laboratorium Pengukuran Listrik</title>
 
-  <!-- Google Fonts Poppins & JetBrains Mono -->
+  <!-- Google Fonts: Space Grotesk, Inter, & JetBrains Mono -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link
-    href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap"
-    rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 
   <!-- Home Page Styles -->
   <link rel="stylesheet" href="{{ asset('css/reset.css') }}">

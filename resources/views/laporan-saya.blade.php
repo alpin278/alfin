@@ -1,14 +1,15 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="id">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="csrf-token" content="{{ csrf_token() }}">
-  <title>Laporan Praktikum Saya — DTE VirtualLab</title>
+  <title>Laporan Praktikum Saya — Fluxus</title>
   
+  <!-- Google Fonts: Space Grotesk, Inter, & JetBrains Mono -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
   
   <link rel="stylesheet" href="{{ asset('css/variables.css') }}">
   <link rel="stylesheet" href="{{ asset('css/home.css') }}">
@@ -74,10 +75,32 @@
       justify-content: space-between;
       gap: 16px;
       transition: transform 0.2s ease, border-color 0.2s ease;
+      width: 100%;
+      min-width: 0;
+      overflow: hidden;
+      box-sizing: border-box;
     }
     .laporan-card:hover {
       border-color: rgba(56, 189, 248, 0.4);
       transform: translateY(-2px);
+    }
+    .laporan-card .materi-title {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow-wrap: break-word;
+      word-break: break-word;
+    }
+    .laporan-card .materi-desc {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow-wrap: break-word;
+      word-break: break-word;
     }
     .laporan-status-badge {
       display: inline-flex;
@@ -102,6 +125,52 @@
       background: rgba(148, 163, 184, 0.12);
       color: #94a3b8;
       border: 1px solid #475569;
+    }
+    .status-requested {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.45);
+    }
+    .status-approved {
+      background: rgba(56, 189, 248, 0.18);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.45);
+    }
+    .status-expired {
+      background: rgba(239, 68, 68, 0.15);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.35);
+    }
+    .reupload-banner {
+      background: rgba(56, 189, 248, 0.1);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-top: 10px;
+      font-size: 0.78rem;
+      color: #cbd5e1;
+    }
+    .btn-request-edit {
+      background: rgba(168, 85, 247, 0.15);
+      border: 1px solid rgba(168, 85, 247, 0.35);
+      color: #c084fc;
+      font-size: 0.78rem;
+      font-weight: 600;
+      padding: 7px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      transition: all 0.15s;
+      text-decoration: none;
+      flex: 1;
+    }
+    .btn-request-edit:hover {
+      background: rgba(168, 85, 247, 0.28);
+      color: #f3e8ff;
+      border-color: #c084fc;
     }
     .grade-highlight-box {
       background: rgba(16, 185, 129, 0.1);
@@ -274,11 +343,28 @@
               <span class="materi-number">MODUL {{ sprintf('%02d', $module->module_number) }}</span>
               @if(!$sub)
                 <span class="laporan-status-badge status-empty">○ Belum Upload</span>
-              @elseif($sub->status === 'graded')
-                <span class="laporan-status-badge status-graded">
+              @elseif($sub->status === 'submitted' && $sub->edit_request_status === 'approved' && !$sub->isEditDeadlinePassed())
+                <span class="laporan-status-badge status-approved">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  Sudah Dinilai
+                  Izin Edit Disetujui
                 </span>
+              @elseif($sub->status === 'graded')
+                @if($sub->edit_request_status === 'requested')
+                  <span class="laporan-status-badge status-requested">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    Izin Edit Diajukan
+                  </span>
+                @elseif($sub->edit_request_status === 'expired')
+                  <span class="laporan-status-badge status-expired">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                    Batas Edit Berakhir
+                  </span>
+                @else
+                  <span class="laporan-status-badge status-graded">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    Sudah Dinilai
+                  </span>
+                @endif
               @else
                 <span class="laporan-status-badge status-submitted">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
@@ -287,8 +373,8 @@
               @endif
             </div>
 
-            <h3 class="materi-title" style="font-size: 1.05rem; margin-bottom: 6px;">{{ $module->title }}</h3>
-            <p class="materi-desc" style="font-size: 0.8rem; line-height: 1.4; margin-bottom: 12px;">{{ Str::limit($module->description, 100) }}</p>
+            <h3 class="materi-title" title="{{ $module->title }}" style="font-size: 1.05rem; margin-bottom: 6px;">{{ $module->title }}</h3>
+            <p class="materi-desc" title="{{ $module->description }}" style="font-size: 0.8rem; line-height: 1.4; margin-bottom: 12px;">{{ Str::limit($module->description, 100) }}</p>
 
             @if($sub)
               <div class="file-attachment-info">
@@ -296,11 +382,48 @@
                 <span>{{ $sub->original_filename }} ({{ $sub->file_size }} KB)</span>
               </div>
 
+              @if($sub->edit_request_status === 'approved')
+                @if(!$sub->isEditDeadlinePassed())
+                  <div class="reupload-banner">
+                    <div style="font-weight: 700; color: #38bdf8; margin-bottom: 2px; display: flex; align-items: center; gap: 5px;">
+                      <span>⏳ Izin Upload Ulang Aktif</span>
+                    </div>
+                    <div>Batas waktu upload: <strong style="color: #f8fafc;">{{ $sub->edit_deadline ? $sub->edit_deadline->translatedFormat('d M Y, H:i') . ' WIB' : '-' }}</strong> ({{ $sub->edit_deadline ? $sub->edit_deadline->diffForHumans() : '' }})</div>
+                  </div>
+                @else
+                  <div style="margin-top: 10px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; padding: 10px 12px; font-size: 0.76rem; color: #fca5a5;">
+                    <div style="font-weight: 700; color: #f87171; margin-bottom: 2px; display: flex; align-items: center; gap: 5px;">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                      <span>Batas Waktu Edit Telah Berakhir</span>
+                    </div>
+                    <div>Batas waktu upload: <strong style="color: #f8fafc;">{{ $sub->edit_deadline ? $sub->edit_deadline->translatedFormat('d M Y, H:i') . ' WIB' : '-' }}</strong>. Form upload dinonaktifkan.</div>
+                  </div>
+                @endif
+              @elseif($sub->edit_request_status === 'expired')
+                <div style="margin-top: 10px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; padding: 10px 12px; font-size: 0.76rem; color: #fca5a5;">
+                  <div style="font-weight: 700; color: #f87171; margin-bottom: 2px; display: flex; align-items: center; gap: 5px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                    <span>Batas Waktu Edit Telah Berakhir</span>
+                  </div>
+                  <div>Batas waktu upload: <strong style="color: #f8fafc;">{{ $sub->edit_deadline ? $sub->edit_deadline->translatedFormat('d M Y, H:i') . ' WIB' : '-' }}</strong>. Form upload dinonaktifkan.</div>
+                </div>
+              @endif
+
               @if($sub->status === 'graded')
+                @if($sub->edit_request_status === 'requested')
+                  <div style="margin-top: 10px; background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 6px; padding: 10px 12px; font-size: 0.76rem; color: #fbbf24;">
+                    ⏳ Permintaan izin edit sedang ditinjau oleh pengajar.
+                  </div>
+                @elseif($sub->edit_request_status === 'rejected')
+                  <div style="margin-top: 10px; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 6px; padding: 8px 12px; font-size: 0.74rem; color: #f87171;">
+                    Permintaan izin edit sebelumnya ditolak oleh pengajar.
+                  </div>
+                @endif
+
                 <div class="grade-highlight-box">
                   <div style="display: flex; justify-content: space-between; align-items: baseline;">
                     <span style="font-size: 0.75rem; font-weight: 700; color: #10b981; text-transform: uppercase;">NILAI AKHIR:</span>
-                    <span class="grade-score-val">{{ $sub->grade }} / 100</span>
+                    <span class="grade-score-val">{{ $sub->grade !== null ? $sub->grade . ' / 100' : 'Menunggu Nilai' }}</span>
                   </div>
                   @if($sub->teacher_feedback)
                     <div class="feedback-quote">"{{ $sub->teacher_feedback }}"</div>
@@ -311,26 +434,40 @@
             @endif
           </div>
 
-          <div style="display: flex; gap: 8px; align-items: center; border-top: 1px solid #334155; padding-top: 12px;">
+          <div style="display: flex; gap: 8px; align-items: center; border-top: 1px solid #334155; padding-top: 12px; flex-wrap: wrap;">
             @if(!$sub)
               <button onclick="openUploadModal('App\\Models\\Module', {{ $module->id }}, 'Modul {{ sprintf('%02d', $module->module_number) }}: {{ addslashes($module->title) }}')" class="btn-cta-sim" style="width: 100%; justify-content: center; font-size: 0.82rem; padding: 8px 12px; display: inline-flex; align-items: center; gap: 6px;">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
                 <span>Upload Laporan</span>
               </button>
-            @elseif($sub->status === 'submitted')
+            @elseif($sub->canStudentUpload())
               <a href="{{ asset('storage/' . $sub->file_path) }}" target="_blank" class="btn-modul-outline" style="flex: 1; text-align: center; font-size: 0.78rem; padding: 7px 10px; text-decoration: none; color: #cbd5e1; display: inline-flex; align-items: center; justify-content: center; gap: 5px;">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path></svg>
                 <span>Lihat File</span>
               </a>
-              <button onclick="openUploadModal('App\\Models\\Module', {{ $module->id }}, 'Modul {{ sprintf('%02d', $module->module_number) }}: {{ addslashes($module->title) }}')" class="btn-cta-sim" style="flex: 1; justify-content: center; font-size: 0.78rem; padding: 7px 10px; background: #334155; border: 1px solid #475569; display: inline-flex; align-items: center; gap: 5px;">
+              <button onclick="openUploadModal('App\\Models\\Module', {{ $module->id }}, 'Modul {{ sprintf('%02d', $module->module_number) }}: {{ addslashes($module->title) }}')" class="btn-cta-sim" style="flex: 1; justify-content: center; font-size: 0.78rem; padding: 7px 10px; background: #0284c7; border: 1px solid #38bdf8; display: inline-flex; align-items: center; gap: 5px;">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-                <span>Ganti File</span>
+                <span>{{ $sub->edit_request_status === 'approved' ? 'Upload Ulang Sekarang' : 'Ganti File' }}</span>
               </button>
             @else
-              <a href="{{ asset('storage/' . $sub->file_path) }}" target="_blank" class="btn-modul-outline" style="width: 100%; text-align: center; font-size: 0.8rem; padding: 8px 12px; text-decoration: none; color: #10b981; border-color: rgba(16, 185, 129, 0.4); display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                <span>Unduh Laporan Saya</span>
+              <a href="{{ asset('storage/' . $sub->file_path) }}" target="_blank" class="btn-modul-outline" style="flex: 1; text-align: center; font-size: 0.78rem; padding: 7px 10px; text-decoration: none; color: #10b981; border-color: rgba(16, 185, 129, 0.4); display: inline-flex; align-items: center; justify-content: center; gap: 5px;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                <span>Unduh Laporan</span>
               </a>
+              @if($sub->edit_request_status === 'requested')
+                <button type="button" disabled class="btn-modul-outline" style="flex: 1; opacity: 0.6; cursor: not-allowed; font-size: 0.76rem; padding: 7px 10px; display: inline-flex; align-items: center; justify-content: center; gap: 5px;">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                  <span>Menunggu Izin</span>
+                </button>
+              @else
+                <form action="{{ route('laporan.request_edit', $sub->id) }}" method="POST" onsubmit="return confirm('Ajukan permohonan izin edit/upload ulang laporan ini ke pengajar?');" style="flex: 1; margin: 0; display: flex;">
+                  @csrf
+                  <button type="submit" class="btn-request-edit" title="Ajukan izin kepada dosen/pengajar untuk mengunggah ulang laporan ini">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                    <span>{{ $sub->edit_request_status === 'expired' || $sub->edit_request_status === 'rejected' ? 'Ajukan Izin Lagi' : 'Ajukan Izin Edit' }}</span>
+                  </button>
+                </form>
+              @endif
             @endif
           </div>
         </div>
@@ -356,10 +493,32 @@
               <span class="materi-number" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3);">KASUS #{{ $case->id }}</span>
               @if(!$sub)
                 <span class="laporan-status-badge status-empty">○ Belum Upload</span>
-              @elseif($sub->status === 'graded')
-                <span class="laporan-status-badge status-graded">
+              @elseif($sub->status === 'submitted' && $sub->edit_request_status === 'approved' && !$sub->isEditDeadlinePassed())
+                <span class="laporan-status-badge status-approved">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  Sudah Dinilai
+                  Izin Edit Disetujui
+                </span>
+              @elseif($sub->status === 'graded')
+                @if($sub->edit_request_status === 'requested')
+                  <span class="laporan-status-badge status-requested">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    Izin Edit Diajukan
+                  </span>
+                @elseif($sub->edit_request_status === 'expired' || ($sub->edit_request_status === 'approved' && $sub->isEditDeadlinePassed()))
+                  <span class="laporan-status-badge status-expired">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                    Batas Edit Berakhir
+                  </span>
+                @else
+                  <span class="laporan-status-badge status-graded">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    Sudah Dinilai
+                  </span>
+                @endif
+              @elseif($sub->edit_request_status === 'expired' || ($sub->edit_request_status === 'approved' && $sub->isEditDeadlinePassed()))
+                <span class="laporan-status-badge status-expired">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                  Batas Edit Berakhir
                 </span>
               @else
                 <span class="laporan-status-badge status-submitted">
@@ -369,8 +528,8 @@
               @endif
             </div>
 
-            <h3 class="materi-title" style="font-size: 1.05rem; margin-bottom: 6px;">{{ $case->title }}</h3>
-            <p class="materi-desc" style="font-size: 0.8rem; line-height: 1.4; margin-bottom: 12px;">{{ Str::limit($case->description, 100) }}</p>
+            <h3 class="materi-title" title="{{ $case->title }}" style="font-size: 1.05rem; margin-bottom: 6px;">{{ $case->title }}</h3>
+            <p class="materi-desc" title="{{ $case->description }}" style="font-size: 0.8rem; line-height: 1.4; margin-bottom: 12px;">{{ Str::limit($case->description, 100) }}</p>
 
             @if($sub)
               <div class="file-attachment-info">
@@ -378,11 +537,48 @@
                 <span>{{ $sub->original_filename }} ({{ $sub->file_size }} KB)</span>
               </div>
 
+              @if($sub->edit_request_status === 'approved')
+                @if(!$sub->isEditDeadlinePassed())
+                  <div class="reupload-banner">
+                    <div style="font-weight: 700; color: #38bdf8; margin-bottom: 2px; display: flex; align-items: center; gap: 5px;">
+                      <span>⏳ Izin Upload Ulang Aktif</span>
+                    </div>
+                    <div>Batas waktu upload: <strong style="color: #f8fafc;">{{ $sub->edit_deadline ? $sub->edit_deadline->translatedFormat('d M Y, H:i') . ' WIB' : '-' }}</strong> ({{ $sub->edit_deadline ? $sub->edit_deadline->diffForHumans() : '' }})</div>
+                  </div>
+                @else
+                  <div style="margin-top: 10px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; padding: 10px 12px; font-size: 0.76rem; color: #fca5a5;">
+                    <div style="font-weight: 700; color: #f87171; margin-bottom: 2px; display: flex; align-items: center; gap: 5px;">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                      <span>Batas Waktu Edit Telah Berakhir</span>
+                    </div>
+                    <div>Batas waktu upload: <strong style="color: #f8fafc;">{{ $sub->edit_deadline ? $sub->edit_deadline->translatedFormat('d M Y, H:i') . ' WIB' : '-' }}</strong>. Form upload dinonaktifkan.</div>
+                  </div>
+                @endif
+              @elseif($sub->edit_request_status === 'expired')
+                <div style="margin-top: 10px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; padding: 10px 12px; font-size: 0.76rem; color: #fca5a5;">
+                  <div style="font-weight: 700; color: #f87171; margin-bottom: 2px; display: flex; align-items: center; gap: 5px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                    <span>Batas Waktu Edit Telah Berakhir</span>
+                  </div>
+                  <div>Batas waktu upload: <strong style="color: #f8fafc;">{{ $sub->edit_deadline ? $sub->edit_deadline->translatedFormat('d M Y, H:i') . ' WIB' : '-' }}</strong>. Form upload dinonaktifkan.</div>
+                </div>
+              @endif
+
               @if($sub->status === 'graded')
+                @if($sub->edit_request_status === 'requested')
+                  <div style="margin-top: 10px; background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 6px; padding: 10px 12px; font-size: 0.76rem; color: #fbbf24;">
+                    ⏳ Permintaan izin edit sedang ditinjau oleh pengajar.
+                  </div>
+                @elseif($sub->edit_request_status === 'rejected')
+                  <div style="margin-top: 10px; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 6px; padding: 8px 12px; font-size: 0.74rem; color: #f87171;">
+                    Permintaan izin edit sebelumnya ditolak oleh pengajar.
+                  </div>
+                @endif
+
                 <div class="grade-highlight-box">
                   <div style="display: flex; justify-content: space-between; align-items: baseline;">
                     <span style="font-size: 0.75rem; font-weight: 700; color: #10b981; text-transform: uppercase;">NILAI AKHIR:</span>
-                    <span class="grade-score-val">{{ $sub->grade }} / 100</span>
+                    <span class="grade-score-val">{{ $sub->grade !== null ? $sub->grade . ' / 100' : 'Menunggu Nilai' }}</span>
                   </div>
                   @if($sub->teacher_feedback)
                     <div class="feedback-quote">"{{ $sub->teacher_feedback }}"</div>
@@ -393,26 +589,40 @@
             @endif
           </div>
 
-          <div style="display: flex; gap: 8px; align-items: center; border-top: 1px solid #334155; padding-top: 12px;">
+          <div style="display: flex; gap: 8px; align-items: center; border-top: 1px solid #334155; padding-top: 12px; flex-wrap: wrap;">
             @if(!$sub)
               <button onclick="openUploadModal('App\\Models\\CaseStudy', {{ $case->id }}, 'Studi Kasus: {{ addslashes($case->title) }}')" class="btn-cta-sim" style="width: 100%; justify-content: center; font-size: 0.82rem; padding: 8px 12px; background: linear-gradient(135deg, #9333ea, #7e22ce); display: inline-flex; align-items: center; gap: 6px;">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
                 <span>Upload Laporan</span>
               </button>
-            @elseif($sub->status === 'submitted')
+            @elseif($sub->canStudentUpload())
               <a href="{{ asset('storage/' . $sub->file_path) }}" target="_blank" class="btn-modul-outline" style="flex: 1; text-align: center; font-size: 0.78rem; padding: 7px 10px; text-decoration: none; color: #cbd5e1; display: inline-flex; align-items: center; justify-content: center; gap: 5px;">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path></svg>
                 <span>Lihat File</span>
               </a>
-              <button onclick="openUploadModal('App\\Models\\CaseStudy', {{ $case->id }}, 'Studi Kasus: {{ addslashes($case->title) }}')" class="btn-cta-sim" style="flex: 1; justify-content: center; font-size: 0.78rem; padding: 7px 10px; background: #334155; border: 1px solid #475569; display: inline-flex; align-items: center; gap: 5px;">
+              <button onclick="openUploadModal('App\\Models\\CaseStudy', {{ $case->id }}, 'Studi Kasus: {{ addslashes($case->title) }}')" class="btn-cta-sim" style="flex: 1; justify-content: center; font-size: 0.78rem; padding: 7px 10px; background: #0284c7; border: 1px solid #38bdf8; display: inline-flex; align-items: center; gap: 5px;">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-                <span>Ganti File</span>
+                <span>{{ $sub->edit_request_status === 'approved' ? 'Upload Ulang Sekarang' : 'Ganti File' }}</span>
               </button>
             @else
-              <a href="{{ asset('storage/' . $sub->file_path) }}" target="_blank" class="btn-modul-outline" style="width: 100%; text-align: center; font-size: 0.8rem; padding: 8px 12px; text-decoration: none; color: #10b981; border-color: rgba(16, 185, 129, 0.4); display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                <span>Unduh Laporan Saya</span>
+              <a href="{{ asset('storage/' . $sub->file_path) }}" target="_blank" class="btn-modul-outline" style="flex: 1; text-align: center; font-size: 0.78rem; padding: 7px 10px; text-decoration: none; color: #10b981; border-color: rgba(16, 185, 129, 0.4); display: inline-flex; align-items: center; justify-content: center; gap: 5px;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                <span>Unduh Laporan</span>
               </a>
+              @if($sub->edit_request_status === 'requested')
+                <button type="button" disabled class="btn-modul-outline" style="flex: 1; opacity: 0.6; cursor: not-allowed; font-size: 0.76rem; padding: 7px 10px; display: inline-flex; align-items: center; justify-content: center; gap: 5px;">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                  <span>Menunggu Izin</span>
+                </button>
+              @else
+                <form action="{{ route('laporan.request_edit', $sub->id) }}" method="POST" onsubmit="return confirm('Ajukan permohonan izin edit/upload ulang laporan ini ke pengajar?');" style="flex: 1; margin: 0; display: flex;">
+                  @csrf
+                  <button type="submit" class="btn-request-edit" title="Ajukan izin kepada dosen/pengajar untuk mengunggah ulang laporan ini">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                    <span>{{ $sub->edit_request_status === 'expired' || $sub->edit_request_status === 'rejected' ? 'Ajukan Izin Lagi' : 'Ajukan Izin Edit' }}</span>
+                  </button>
+                </form>
+              @endif
             @endif
           </div>
         </div>
@@ -444,9 +654,11 @@
         </div>
 
         <div style="margin-bottom: 14px;">
-          <label for="laporanFile" style="display: block; font-size: 0.78rem; font-weight: 600; color: #94a3b8; margin-bottom: 6px;">Pilih File Laporan (Maks. 10MB):</label>
-          <input type="file" name="file" id="laporanFile" required style="display: block; width: 100%; background: #1e293b; border: 1px dashed #475569; padding: 12px; border-radius: 6px; color: #f8fafc; font-size: 0.82rem; cursor: pointer;">
-          <small style="display: block; color: #64748b; font-size: 0.72rem; margin-top: 5px;">Format yang didukung: PDF, Word (DOC/DOCX), Excel, PPT, Gambar (JPG, PNG).</small>
+          <label for="laporanFile" style="display: block; font-size: 0.78rem; font-weight: 600; color: #94a3b8; margin-bottom: 6px;">Pilih File Laporan (Maks. 10 MB):</label>
+          <input type="file" name="file" id="laporanFile" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png,.zip,.rar" required style="display: block; width: 100%; background: #1e293b; border: 1px dashed #475569; padding: 12px; border-radius: 6px; color: #f8fafc; font-size: 0.82rem; cursor: pointer;">
+          <small style="display: block; color: #94a3b8; font-size: 0.72rem; margin-top: 5px; line-height: 1.4;">
+            Format yang didukung: <strong>PDF, Word (.doc, .docx), PowerPoint (.ppt, .pptx), Excel (.xls, .xlsx), Gambar (JPG, PNG), Arsip (ZIP, RAR)</strong>. Ukuran maksimal <strong>10 MB</strong>.
+          </small>
         </div>
 
         <div style="margin-bottom: 20px;">
@@ -482,6 +694,27 @@
         closeUploadModal();
       }
     }
+
+    // Validasi Frontend Instan Ukuran & Format File
+    document.getElementById('laporanFile').addEventListener('change', function() {
+      const file = this.files[0];
+      if (!file) return;
+
+      const maxBytes = 10 * 1024 * 1024; // 10 MB
+      if (file.size > maxBytes) {
+        alert('Ukuran file terlalu besar (' + (file.size / (1024 * 1024)).toFixed(2) + ' MB).\nUkuran file maksimal yang diizinkan adalah 10 MB.');
+        this.value = '';
+        return;
+      }
+
+      const allowedExts = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'jpg', 'jpeg', 'png', 'zip', 'rar'];
+      const fileExt = file.name.split('.').pop().toLowerCase();
+      if (!allowedExts.includes(fileExt)) {
+        alert('Format file .' + fileExt + ' tidak didukung.\nFormat yang diizinkan: PDF, Word (.doc, .docx), PowerPoint (.ppt, .pptx), Excel (.xls, .xlsx), JPG, PNG, ZIP, RAR.');
+        this.value = '';
+        return;
+      }
+    });
   </script>
 </body>
 </html>
