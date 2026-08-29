@@ -295,13 +295,39 @@ export class ComponentEngine {
     const proto = COMPONENT_PROTOTYPES[type];
     if (!proto) return;
 
+    const state = stateManager.getState();
     const id = `${type}-${String(componentCounter++).padStart(3, "0")}`;
+
+    // Prevent direct overlap with existing components
+    let finalX = Math.round(x);
+    let finalY = Math.round(y);
+    const compW = proto.width || 100;
+    const compH = proto.height || 60;
+
+    let overlap = true;
+    let attempts = 0;
+    while (overlap && attempts < 10) {
+      overlap = state.components.some(c => {
+        const otherW = c.width || 100;
+        const otherH = c.height || 60;
+        return (
+          Math.abs(finalX - c.x) < Math.max(compW, otherW) * 0.75 &&
+          Math.abs(finalY - c.y) < Math.max(compH, otherH) * 0.75
+        );
+      });
+      if (overlap) {
+        finalX += 30;
+        finalY += 30;
+        attempts++;
+      }
+    }
+
     const newComponent = {
       id,
       type,
       name: `${proto.name} ${componentCounter - 1}`,
-      x,
-      y,
+      x: finalX,
+      y: finalY,
       rotation: 0,
       width: proto.width,
       height: proto.height,
@@ -900,7 +926,7 @@ export class ComponentEngine {
             return;
           }
         }
-        this.workspace.connectionEngine.cancelConnecting();
+        return;
       }
 
       // NEVER intercept if clicking a terminal node, smart numbering badge, hanging wire node, or probe assembly
@@ -1483,11 +1509,44 @@ export class ComponentEngine {
     return `M ${startX} ${startY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${endX} ${endY}`;
   }
 
+  /**
+   * Calculates the probe orientation and top cable entry coordinates
+   * Connected: stands upright (angle = 0) plugged into pin socket depth (40px)
+   * Idle: docks aligned with multimeter body casing (52px)
+   */
+  calculateProbeOrientation(probePos, jackPos, isConnected, compRotation = 0) {
+    const originX = jackPos.x;
+    const originY = jackPos.y;
+    const targetX = probePos.x;
+    const targetY = probePos.y;
+
+    console.log('origin:', originX, originY);
+    console.log('target:', targetX, targetY);
+
+    // Connected state: stands upright on pin (0 deg) matching hosting version
+    // Idle state: rotates with the multimeter casing
+    const angleDeg = isConnected ? 0 : (compRotation || 0);
+    const rad = (angleDeg * Math.PI) / 180;
+
+    // Y offset when plugged into pin (40px) vs idle on casing (52px)
+    const probeHeightOffset = isConnected ? 40 : 52;
+    const topY = targetY - probeHeightOffset;
+    const cableX = Math.round(targetX + probeHeightOffset * Math.sin(rad));
+    const cableY = Math.round(targetY - probeHeightOffset * Math.cos(rad));
+
+    const posisiUjungX = targetX;
+    const posisiUjungY = targetY;
+    console.log('ujung jarum akhir:', posisiUjungX, posisiUjungY);
+
+    return { angleDeg, topY, cableX, cableY, targetX, targetY, posisiUjungX, posisiUjungY };
+  }
+
   createProbeElement(comp, probeKey) {
     const isCom = probeKey === "com";
     const label = isCom ? "COM" : "VΩ";
     const title = isCom ? "Tarik Probe COM (Hitam) ke titik pengukuran" : "Tarik Probe VΩmA (Merah) ke titik pengukuran";
-    const colorClass = isCom ? "black" : "red";
+    const gradLight = isCom ? "#1e293b" : "#ef4444";
+    const gradDark = isCom ? "#0f172a" : "#b91c1c";
 
     const el = document.createElement("div");
     el.className = `probe-assembly probe-${probeKey}-assembly`;
@@ -1498,12 +1557,42 @@ export class ComponentEngine {
 
     el.innerHTML = `
       <div class="probe-touch-hitbox"></div>
-      <div class="probe-finger-guard guard-${colorClass}"></div>
-      <div class="probe-body-collar collar-${colorClass}">
-        <span class="probe-lead-label">${label}</span>
-      </div>
-      <div class="probe-grip grip-${colorClass}"></div>
-      <div class="probe-pin-needle needle-${colorClass}"></div>
+      <svg width="24" height="52" viewBox="0 0 24 52" fill="none" xmlns="http://www.w3.org/2000/svg" class="probe-svg-visual">
+        <defs>
+          <linearGradient id="needle-metal-${probeKey}-${comp.id}" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#ffffff"/>
+            <stop offset="45%" stop-color="#e2e8f0"/>
+            <stop offset="70%" stop-color="#94a3b8"/>
+            <stop offset="100%" stop-color="#475569"/>
+          </linearGradient>
+          <linearGradient id="collar-grad-${probeKey}-${comp.id}" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="${gradLight}"/>
+            <stop offset="100%" stop-color="${gradDark}"/>
+          </linearGradient>
+        </defs>
+        
+        <!-- Top Cable Strain Relief (y: 0-4, center x=12) -->
+        <rect x="9" y="0" width="6" height="4" rx="1.5" fill="#0f172a" stroke="#334155" stroke-width="0.75"/>
+        
+        <!-- Molded Finger Guard (y: 4-8.5, width: 20) -->
+        <rect x="2" y="4" width="20" height="4.5" rx="2" fill="${gradDark}" stroke="#0f172a" stroke-width="1"/>
+        
+        <!-- Probe Handle Body (y: 8.5-26, width: 14) -->
+        <rect x="5" y="8.5" width="14" height="17.5" rx="2.5" fill="url(#collar-grad-${probeKey}-${comp.id})" stroke="#0f172a" stroke-width="1"/>
+        <!-- Ribbed Grips -->
+        <rect x="6.5" y="11" width="11" height="1.5" rx="0.5" fill="#0f172a" opacity="0.45"/>
+        <rect x="6.5" y="14.5" width="11" height="1.5" rx="0.5" fill="#0f172a" opacity="0.45"/>
+        <rect x="6.5" y="18" width="11" height="1.5" rx="0.5" fill="#0f172a" opacity="0.45"/>
+        
+        <!-- Lead Label (COM / VΩ) -->
+        <text x="12" y="23" font-size="5" font-family="monospace" font-weight="900" fill="#ffffff" text-anchor="middle" letter-spacing="0.5">${label}</text>
+        
+        <!-- Tapered Collar Nose (y: 26-36) -->
+        <path d="M6 26 L18 26 L14 36 L10 36 Z" fill="url(#collar-grad-${probeKey}-${comp.id})" stroke="#0f172a" stroke-width="1"/>
+        
+        <!-- Metallic Pin Needle (y: 36-52, apex touches EXACTLY x=12, y=52!) -->
+        <path d="M10.5 36 L13.5 36 L12.5 50 L12 52 L11.5 50 Z" fill="url(#needle-metal-${probeKey}-${comp.id})" stroke="#334155" stroke-width="0.6"/>
+      </svg>
     `;
 
     this.bindProbeDragEvents(el, comp, probeKey);
@@ -1533,6 +1622,10 @@ export class ComponentEngine {
       e.stopPropagation();
       if (e.cancelable) e.preventDefault();
 
+      if (e.pointerId !== undefined && probeEl.setPointerCapture) {
+        try { probeEl.setPointerCapture(e.pointerId); } catch (err) {}
+      }
+
       isDragging = true;
       hasMoved = false;
       activeSnap = null;
@@ -1541,7 +1634,7 @@ export class ComponentEngine {
       startScreenX = coords.x ?? 0;
       startScreenY = coords.y ?? 0;
 
-      // Capture initial attachment state without detaching yet
+      // Capture initial attachment state
       initialAttachedTo = comp.properties.probes?.[probeKey]?.attachedTo 
         ? { ...comp.properties.probes[probeKey].attachedTo } 
         : null;
@@ -1556,7 +1649,7 @@ export class ComponentEngine {
         if (moveCoords.x === undefined || moveCoords.y === undefined) return;
 
         const screenDist = Math.hypot(moveCoords.x - startScreenX, moveCoords.y - startScreenY);
-        if (screenDist > 5) {
+        if (screenDist > 3) {
           hasMoved = true;
         }
 
@@ -1565,62 +1658,58 @@ export class ComponentEngine {
         const rawPos = this.workspace.screenToCanvas(moveCoords.x, moveCoords.y);
         currentRawPos = rawPos;
 
-        // If previously attached and dragged away > 10px from start:
+        // If previously attached, remove old highlight and detach active property during drag
         if (initialAttachedTo) {
           const oldTargetEl = document.getElementById(
             `term-${initialAttachedTo.compId}-${initialAttachedTo.termId}`
           );
           if (oldTargetEl) oldTargetEl.classList.remove(`probe-attached-${probeKey}`);
         }
+        comp.properties.probes[probeKey].attachedTo = null;
 
         // Clean up previous highlights
         document.querySelectorAll(".terminal-node.probe-snap-highlight").forEach(t => t.classList.remove("probe-snap-highlight"));
-        document.querySelectorAll(".circuit-wire.wire-cut-preview").forEach(w => w.classList.remove("wire-cut-preview"));
 
-        // Priority 1: Terminal Pin Snap (active in ALL modes: V, OHM, and A)
-        const snap = this.workspace.connectionEngine.findNearestTerminalSnap(rawPos.x, rawPos.y, 32);
+        // Terminal Pin Snap (radius 35px)
+        const snap = this.workspace.connectionEngine.findNearestTerminalSnap(rawPos.x, rawPos.y, 35);
 
+        let finalPos = rawPos;
         if (snap && snap.compId !== comp.id) {
           activeSnap = snap;
           snap.el.classList.add("probe-snap-highlight");
-          comp.properties.probes[probeKey].worldX = snap.pos.x;
-          comp.properties.probes[probeKey].worldY = snap.pos.y;
+          finalPos = snap.pos;
         } else {
-          // Priority 2: Wire Junction Snap (snap directly to wire path)
-          const wireSnap = this.workspace.connectionEngine.findNearestWireSnap(rawPos.x, rawPos.y, 14);
-          if (wireSnap && !wireSnap.conn.id.includes(comp.id)) {
-            const targetEndpoint = wireSnap.conn.from?.componentId ? wireSnap.conn.from : wireSnap.conn.to;
-            if (targetEndpoint && targetEndpoint.componentId) {
-              activeSnap = {
-                compId: targetEndpoint.componentId,
-                termId: targetEndpoint.terminalId,
-                pos: wireSnap.point,
-                isWireJunction: true
-              };
-              const wireEl = document.getElementById(wireSnap.conn.id);
-              if (wireEl) wireEl.classList.add("wire-cut-preview");
-              comp.properties.probes[probeKey].worldX = wireSnap.point.x;
-              comp.properties.probes[probeKey].worldY = wireSnap.point.y;
-            } else {
-              activeSnap = null;
-              comp.properties.probes[probeKey].worldX = rawPos.x;
-              comp.properties.probes[probeKey].worldY = rawPos.y;
-            }
-          } else {
-            activeSnap = null;
-            comp.properties.probes[probeKey].worldX = rawPos.x;
-            comp.properties.probes[probeKey].worldY = rawPos.y;
-          }
+          activeSnap = null;
         }
 
+        comp.properties.probes[probeKey].worldX = finalPos.x;
+        comp.properties.probes[probeKey].worldY = finalPos.y;
         comp.properties.probes[probeKey].isPlaced = true;
-        this.updateMultimeterProbeVisuals(comp);
+
+        const jackRelX = probeKey === "com" ? 48 : 84;
+        const jackPos = getRotatedPosition(comp.x, comp.y, comp.width, comp.height, jackRelX, 186, comp.rotation);
+        const orient = this.calculateProbeOrientation(finalPos, jackPos, !!activeSnap, comp.rotation);
+
+        // Deterministic Locked Anchor with hosting socket depth
+        probeEl.style.left = `${orient.targetX - 12}px`;
+        probeEl.style.top = `${orient.topY}px`;
+        probeEl.style.transformOrigin = "12px 52px";
+        probeEl.style.transform = orient.angleDeg ? `rotate(${orient.angleDeg}deg)` : "none";
+
+        const wireEl = document.getElementById(`meter-wire-${probeKey}-${comp.id}`);
+        if (wireEl) {
+          wireEl.setAttribute("d", this.calculateProbeWirePath(jackPos.x, jackPos.y, orient.cableX, orient.cableY));
+        }
       };
 
       const onPointerUp = (upEvt) => {
         if (!isDragging) return;
         isDragging = false;
         probeEl.classList.remove("is-dragging");
+
+        if (e.pointerId !== undefined && probeEl.releasePointerCapture) {
+          try { probeEl.releasePointerCapture(e.pointerId); } catch (err) {}
+        }
 
         window.removeEventListener("pointermove", onPointerMove);
         window.removeEventListener("pointerup", onPointerUp);
@@ -1632,7 +1721,6 @@ export class ComponentEngine {
         window.removeEventListener("touchcancel", onPointerUp);
 
         document.querySelectorAll(".terminal-node.probe-snap-highlight").forEach(t => t.classList.remove("probe-snap-highlight"));
-        document.querySelectorAll(".circuit-wire.wire-cut-preview").forEach(w => w.classList.remove("wire-cut-preview"));
 
         // Case 1: Simple click without actual drag -> PRESERVE CURRENT ATTACHMENT STATE
         if (!hasMoved) {
@@ -1647,7 +1735,7 @@ export class ComponentEngine {
           return;
         }
 
-        // Case 2: Dragged and released over a valid component terminal or wire node -> CONNECTED (State 2)
+        // Case 2: Dragged and released over a valid component terminal -> CONNECTED (State 2)
         if (activeSnap && activeSnap.compId !== comp.id) {
           comp.properties.probes[probeKey].attachedTo = {
             compId: activeSnap.compId,
@@ -1718,13 +1806,16 @@ export class ComponentEngine {
       const wireEl = document.getElementById(`meter-wire-${probeKey}-${comp.id}`);
       const jackRelX = probeKey === "com" ? 48 : 84;
       const jackPos = getRotatedPosition(comp.x, comp.y, comp.width, comp.height, jackRelX, 186, comp.rotation);
+      const orient = this.calculateProbeOrientation({ x: Math.round(curX), y: Math.round(curY) }, jackPos, false, comp.rotation);
 
       if (probeEl) {
-        probeEl.style.left = `${Math.round(curX)}px`;
-        probeEl.style.top = `${Math.round(curY)}px`;
+        probeEl.style.left = `${orient.targetX - 12}px`;
+        probeEl.style.top = `${orient.topY}px`;
+        probeEl.style.transformOrigin = "12px 52px";
+        probeEl.style.transform = orient.angleDeg ? `rotate(${orient.angleDeg}deg)` : "none";
       }
       if (wireEl) {
-        wireEl.setAttribute("d", this.calculateProbeWirePath(jackPos.x, jackPos.y, Math.round(curX), Math.round(curY) - 22));
+        wireEl.setAttribute("d", this.calculateProbeWirePath(jackPos.x, jackPos.y, orient.cableX, orient.cableY));
       }
 
       if (progress < 1) {
@@ -1768,72 +1859,76 @@ export class ComponentEngine {
 
     // --- COM Probe Position ---
     let comPos = comDefaultPos;
+    let isComConnected = false;
     if (comp.properties.probes.com?.attachedTo) {
-      // State 2: Connected to terminal
       const targetPos = this.workspace?.connectionEngine?.getTerminalWorldPosition(
         comp.properties.probes.com.attachedTo.compId,
         comp.properties.probes.com.attachedTo.termId
       );
       if (targetPos) {
         comPos = targetPos;
+        isComConnected = true;
         comp.properties.probes.com.worldX = targetPos.x;
         comp.properties.probes.com.worldY = targetPos.y;
-      } else if (comp.properties.probes.com.worldX !== undefined && comp.properties.probes.com.worldY !== undefined) {
-        // Wire junction or preserved world coordinate
-        comPos = { x: comp.properties.probes.com.worldX, y: comp.properties.probes.com.worldY };
       } else {
-        const targetCompExists = state.components.some(c => c.id === comp.properties.probes.com.attachedTo.compId);
-        if (!targetCompExists) {
-          comp.properties.probes.com.attachedTo = null;
-          comp.properties.probes.com.isPlaced = false;
-          comPos = comDefaultPos;
-        }
+        comp.properties.probes.com.attachedTo = null;
+        comp.properties.probes.com.isPlaced = false;
+        delete comp.properties.probes.com.worldX;
+        delete comp.properties.probes.com.worldY;
+        comPos = comDefaultPos;
+        isComConnected = false;
       }
-    } else if (comp.properties.probes.com?.isPlaced && comp.properties.probes.com.worldX !== undefined) {
-      comPos = { x: comp.properties.probes.com.worldX, y: comp.properties.probes.com.worldY };
+    } else {
+      comPos = comDefaultPos;
+      isComConnected = false;
     }
 
+    const comOrient = this.calculateProbeOrientation(comPos, comJackPos, isComConnected, comp.rotation);
     if (comProbe) {
-      comProbe.style.left = `${comPos.x}px`;
-      comProbe.style.top = `${comPos.y}px`;
+      comProbe.style.left = `${comOrient.targetX - 12}px`;
+      comProbe.style.top = `${comOrient.topY}px`;
+      comProbe.style.transformOrigin = "12px 52px";
+      comProbe.style.transform = comOrient.angleDeg ? `rotate(${comOrient.angleDeg}deg)` : "none";
     }
     if (comWire) {
-      comWire.setAttribute("d", this.calculateProbeWirePath(comJackPos.x, comJackPos.y, comPos.x, comPos.y - 22));
+      comWire.setAttribute("d", this.calculateProbeWirePath(comJackPos.x, comJackPos.y, comOrient.cableX, comOrient.cableY));
     }
 
     // --- VΩmA Probe Position ---
     let vwmaPos = vwmaDefaultPos;
+    let isVwmaConnected = false;
     if (comp.properties.probes.vwma?.attachedTo) {
-      // State 2: Connected to terminal
       const targetPos = this.workspace?.connectionEngine?.getTerminalWorldPosition(
         comp.properties.probes.vwma.attachedTo.compId,
         comp.properties.probes.vwma.attachedTo.termId
       );
       if (targetPos) {
         vwmaPos = targetPos;
+        isVwmaConnected = true;
         comp.properties.probes.vwma.worldX = targetPos.x;
         comp.properties.probes.vwma.worldY = targetPos.y;
-      } else if (comp.properties.probes.vwma.worldX !== undefined && comp.properties.probes.vwma.worldY !== undefined) {
-        // Wire junction or preserved world coordinate
-        vwmaPos = { x: comp.properties.probes.vwma.worldX, y: comp.properties.probes.vwma.worldY };
       } else {
-        const targetCompExists = state.components.some(c => c.id === comp.properties.probes.vwma.attachedTo.compId);
-        if (!targetCompExists) {
-          comp.properties.probes.vwma.attachedTo = null;
-          comp.properties.probes.vwma.isPlaced = false;
-          vwmaPos = vwmaDefaultPos;
-        }
+        comp.properties.probes.vwma.attachedTo = null;
+        comp.properties.probes.vwma.isPlaced = false;
+        delete comp.properties.probes.vwma.worldX;
+        delete comp.properties.probes.vwma.worldY;
+        vwmaPos = vwmaDefaultPos;
+        isVwmaConnected = false;
       }
-    } else if (comp.properties.probes.vwma?.isPlaced && comp.properties.probes.vwma.worldX !== undefined) {
-      vwmaPos = { x: comp.properties.probes.vwma.worldX, y: comp.properties.probes.vwma.worldY };
+    } else {
+      vwmaPos = vwmaDefaultPos;
+      isVwmaConnected = false;
     }
 
+    const vwmaOrient = this.calculateProbeOrientation(vwmaPos, vwmaJackPos, isVwmaConnected, comp.rotation);
     if (vwmaProbe) {
-      vwmaProbe.style.left = `${vwmaPos.x}px`;
-      vwmaProbe.style.top = `${vwmaPos.y}px`;
+      vwmaProbe.style.left = `${vwmaOrient.targetX - 12}px`;
+      vwmaProbe.style.top = `${vwmaOrient.topY}px`;
+      vwmaProbe.style.transformOrigin = "12px 52px";
+      vwmaProbe.style.transform = vwmaOrient.angleDeg ? `rotate(${vwmaOrient.angleDeg}deg)` : "none";
     }
     if (vwmaWire) {
-      vwmaWire.setAttribute("d", this.calculateProbeWirePath(vwmaJackPos.x, vwmaJackPos.y, vwmaPos.x, vwmaPos.y - 22));
+      vwmaWire.setAttribute("d", this.calculateProbeWirePath(vwmaJackPos.x, vwmaJackPos.y, vwmaOrient.cableX, vwmaOrient.cableY));
     }
   }
 

@@ -158,13 +158,6 @@ class AppState {
 
   deleteComponent(id) {
     this.recordHistory();
-    const comp = this.state.components.find(c => c.id === id);
-    if (comp?.type === "multimeter" && comp.properties?.insertedIntoWire) {
-      const { originalWire } = comp.properties.insertedIntoWire;
-      if (!this.state.connections.some(c => c.id === originalWire.id)) {
-        this.state.connections.push(originalWire);
-      }
-    }
     this.state.components = this.state.components.filter(c => c.id !== id);
     // Remove all associated connections
     this.state.connections = this.state.connections.filter(

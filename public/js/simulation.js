@@ -414,14 +414,15 @@ export class SimulationEngine {
           readingText = "0.00";
         } else if (termVwma === termCom) {
           readingText = "0.00";
-        } else if (circuitResult && circuitResult.nodeVoltages) {
+        } else {
           const uf = this.buildEquipotentialNets(components, connections);
-          const vA = circuitResult.nodeVoltages.get(uf.find(termVwma)) || 0;
-          const vB = circuitResult.nodeVoltages.get(uf.find(termCom)) || 0;
+          const nodeVoltages = this.getNodeVoltages(components, connections, uf, circuitResult);
+          const netA = uf.find(termVwma);
+          const netB = uf.find(termCom);
+          const vA = nodeVoltages.get(netA) ?? 0;
+          const vB = nodeVoltages.get(netB) ?? 0;
           const vDiff = Math.abs(vA - vB);
           readingText = vDiff.toFixed(2);
-        } else {
-          readingText = "0.00";
         }
       } else if (mode === "A_DC") {
         if (!hasValidVwma || !hasValidCom) {
@@ -444,6 +445,74 @@ export class SimulationEngine {
       const valEl = document.getElementById(`meter-val-${m.id}`);
       if (valEl) valEl.textContent = readingText;
     });
+  }
+
+  /**
+   * Resolves DC Electrical Potentials across all circuit nodes
+   * (supporting active circuits, open-circuit branches, and standalone battery testing)
+   */
+  getNodeVoltages(components, connections, uf, circuitResult = null) {
+    const nodeVoltages = new Map();
+
+    // 1. Start with solved voltages if active circuit with current flow was solved
+    if (circuitResult && circuitResult.nodeVoltages) {
+      circuitResult.nodeVoltages.forEach((v, net) => nodeVoltages.set(net, v));
+    }
+
+    // 2. Ensure all batteries / DC sources have their EMF potentials assigned
+    const batteries = components.filter(c => c.type === "battery" || c.type === "power_supply");
+    batteries.forEach(bat => {
+      const batNegNet = uf.find(`${bat.id}:term_neg`);
+      const batPosNet = uf.find(`${bat.id}:term_pos`);
+      const vBat = Number(bat.properties.voltage || 12);
+
+      if (!nodeVoltages.has(batNegNet)) {
+        nodeVoltages.set(batNegNet, 0);
+      }
+      const refNeg = nodeVoltages.get(batNegNet) || 0;
+      if (!nodeVoltages.has(batPosNet)) {
+        nodeVoltages.set(batPosNet, refNeg + vBat);
+      }
+    });
+
+    // 3. Propagate voltages across open-circuit or zero-current branches
+    let changed = true;
+    let iterations = 0;
+    while (changed && iterations < 15) {
+      changed = false;
+      iterations++;
+
+      components.forEach(c => {
+        if (c.type === "switch_spst") {
+          if (c.properties.isClosed && c.terminals?.length >= 2) {
+            const n1 = uf.find(`${c.id}:${c.terminals[0].id}`);
+            const n2 = uf.find(`${c.id}:${c.terminals[1].id}`);
+            if (nodeVoltages.has(n1) && !nodeVoltages.has(n2)) {
+              nodeVoltages.set(n2, nodeVoltages.get(n1));
+              changed = true;
+            } else if (nodeVoltages.has(n2) && !nodeVoltages.has(n1)) {
+              nodeVoltages.set(n1, nodeVoltages.get(n2));
+              changed = true;
+            }
+          }
+        } else if (["resistor", "lamp", "led", "motor_dc", "diode"].includes(c.type) && c.terminals?.length >= 2) {
+          // In open circuit (zero current), no voltage drop occurs across passive component
+          if (!circuitResult || circuitResult.totalCurrent < 1e-6) {
+            const n1 = uf.find(`${c.id}:${c.terminals[0].id}`);
+            const n2 = uf.find(`${c.id}:${c.terminals[1].id}`);
+            if (nodeVoltages.has(n1) && !nodeVoltages.has(n2)) {
+              nodeVoltages.set(n2, nodeVoltages.get(n1));
+              changed = true;
+            } else if (nodeVoltages.has(n2) && !nodeVoltages.has(n1)) {
+              nodeVoltages.set(n1, nodeVoltages.get(n2));
+              changed = true;
+            }
+          }
+        }
+      });
+    }
+
+    return nodeVoltages;
   }
 
   /**

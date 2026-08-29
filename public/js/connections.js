@@ -28,6 +28,12 @@ export class ConnectionEngine {
     this.snapIndicator = null;
     this.floatingToolbar = null;
 
+    // Endpoint Lifting / Detaching / Re-dragging State
+    this.isReconnectingEndpoint = false;
+    this.reconnectingConn = null;
+    this.detachedEnd = null;     // "from" | "to"
+    this.originalTarget = null;
+
     // Mobile & Touch Gesture Tracking
     this.isDraggingWire = false;
     this.dragHasMoved = false;
@@ -172,19 +178,46 @@ export class ConnectionEngine {
         const termSnap = this.hoveredTerminal || this.findNearestTerminalSnap(rawPos.x, rawPos.y, 40);
         if (termSnap) {
           if (e.cancelable) e.preventDefault();
-          this.createConnection(
-            this.sourceTerminal.isHanging ? this.sourceTerminal : { componentId: this.sourceTerminal.componentId, terminalId: this.sourceTerminal.terminalId },
-            { componentId: termSnap.compId, terminalId: termSnap.termId },
-            [...this.waypoints]
-          );
-          this.cancelConnecting();
-          return;
+          if (this.isReconnectingEndpoint && this.reconnectingConn) {
+            if (termSnap.compId !== this.sourceTerminal.componentId || termSnap.termId !== this.sourceTerminal.terminalId) {
+              stateManager.recordHistory();
+              if (this.detachedEnd === "to") {
+                this.reconnectingConn.to = { componentId: termSnap.compId, terminalId: termSnap.termId };
+              } else {
+                this.reconnectingConn.from = { componentId: termSnap.compId, terminalId: termSnap.termId };
+              }
+              this.reconnectingConn.waypoints = this.waypoints.length > 0 ? [...this.waypoints] : null;
+              const connId = this.reconnectingConn.id;
+              this.isReconnectingEndpoint = false;
+              this.reconnectingConn = null;
+              this.cancelConnecting();
+              stateManager.setSelection("connection", connId);
+              stateManager.notify("connections");
+              stateManager.notify("simulation");
+              return;
+            }
+          } else {
+            this.createConnection(
+              this.sourceTerminal.isHanging ? this.sourceTerminal : { componentId: this.sourceTerminal.componentId, terminalId: this.sourceTerminal.terminalId },
+              { componentId: termSnap.compId, terminalId: termSnap.termId },
+              [...this.waypoints]
+            );
+            this.cancelConnecting();
+            return;
+          }
         }
 
         // Check if released on a wire branch
         if (this.snapTarget) {
           if (e.cancelable) e.preventDefault();
           this.finishJunctionConnection(this.snapTarget.conn, this.snapTarget.point);
+          return;
+        }
+
+        // If reconnecting and dropped in open air -> rollback to original terminal!
+        if (this.isReconnectingEndpoint) {
+          this.cancelConnecting();
+          stateManager.notify("connections");
           return;
         }
       }
@@ -194,8 +227,12 @@ export class ConnectionEngine {
 
     window.addEventListener("pointermove", onPointerMove, { passive: false });
     window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("mousemove", onPointerMove, { passive: false });
+    window.addEventListener("mouseup", onPointerUp);
     window.addEventListener("touchmove", onPointerMove, { passive: false });
     window.addEventListener("touchend", onPointerUp);
+    document.addEventListener("pointermove", onPointerMove, { passive: false });
+    document.addEventListener("mousemove", onPointerMove, { passive: false });
 
     const container = this.workspace.container;
     if (container) {
@@ -343,14 +380,70 @@ export class ConnectionEngine {
     const termPos = this.getTerminalWorldPosition(compId, termId);
     if (!termPos) return;
 
+    const state = stateManager.getState();
+
     if (!this.isConnecting) {
       // Cooldown guard: Cegah ghost click/pointerdown ganda memulai kabel baru seketika setelah kabel difinalisasi
-      if (Date.now() - this.lastConnectionFinishTime < 350) {
+      if (Date.now() - this.lastConnectionFinishTime < 300) {
         return;
       }
 
+      // Check if there is an existing connection attached to this terminal (endpoint lifting / re-dragging)
+      const existingConn = state.connections.find(
+        c => (!c.to?.isHanging && !c.to?.isWireBranch && c.to?.componentId === compId && c.to?.terminalId === termId) ||
+             (!c.from?.isWireBranch && !c.from?.isHanging && c.from?.componentId === compId && c.from?.terminalId === termId)
+      );
+
+      if (existingConn) {
+        // Detach this endpoint and start live re-dragging to a new pin!
+        this.isConnecting = true;
+        this.isDraggingWire = true;
+        this.isReconnectingEndpoint = true;
+        this.reconnectingConn = existingConn;
+        this.dragHasMoved = false;
+
+        const clientX = e?.clientX ?? (e?.touches && e.touches[0] ? e.touches[0].clientX : 0);
+        const clientY = e?.clientY ?? (e?.touches && e.touches[0] ? e.touches[0].clientY : 0);
+        this.dragStartCoords = { x: clientX, y: clientY };
+
+        if (existingConn.to?.componentId === compId && existingConn.to?.terminalId === termId) {
+          this.detachedEnd = "to";
+          this.originalTarget = { ...existingConn.to };
+          const pAnchor = this.getConnectionEndpoint(existingConn.from);
+          this.sourceTerminal = {
+            ...existingConn.from,
+            worldX: pAnchor ? pAnchor.x : termPos.x,
+            worldY: pAnchor ? pAnchor.y : termPos.y
+          };
+        } else {
+          this.detachedEnd = "from";
+          this.originalTarget = { ...existingConn.from };
+          const pAnchor = this.getConnectionEndpoint(existingConn.to);
+          this.sourceTerminal = {
+            ...existingConn.to,
+            worldX: pAnchor ? pAnchor.x : termPos.x,
+            worldY: pAnchor ? pAnchor.y : termPos.y
+          };
+        }
+
+        // Visually fade original path while dragging its detached endpoint
+        const origPath = document.getElementById(`wire-${existingConn.id}`);
+        if (origPath) origPath.style.opacity = "0.2";
+
+        termEl.classList.add("connecting-source");
+        if (this.wirePreview) {
+          this.wirePreview.style.display = "block";
+          this.currentMousePos = { x: termPos.x, y: termPos.y };
+          this.drawWirePreview();
+        }
+        return;
+      }
+
+      // No existing connection on this terminal -> Start brand new wire connection
       this.isConnecting = true;
       this.isDraggingWire = true;
+      this.isReconnectingEndpoint = false;
+      this.reconnectingConn = null;
       this.dragHasMoved = false;
       const clientX = e?.clientX ?? (e?.touches && e.touches[0] ? e.touches[0].clientX : 0);
       const clientY = e?.clientY ?? (e?.touches && e.touches[0] ? e.touches[0].clientY : 0);
@@ -374,6 +467,30 @@ export class ConnectionEngine {
         this.drawWirePreview();
       }
     } else {
+      if (this.isReconnectingEndpoint && this.reconnectingConn) {
+        if (compId === this.sourceTerminal.componentId && termId === this.sourceTerminal.terminalId) {
+          this.cancelConnecting();
+          return;
+        }
+
+        stateManager.recordHistory();
+        if (this.detachedEnd === "to") {
+          this.reconnectingConn.to = { componentId: compId, terminalId: termId };
+        } else {
+          this.reconnectingConn.from = { componentId: compId, terminalId: termId };
+        }
+        this.reconnectingConn.waypoints = this.waypoints.length > 0 ? [...this.waypoints] : null;
+
+        const connId = this.reconnectingConn.id;
+        this.isReconnectingEndpoint = false;
+        this.reconnectingConn = null;
+        this.cancelConnecting();
+        stateManager.setSelection("connection", connId);
+        stateManager.notify("connections");
+        stateManager.notify("simulation");
+        return;
+      }
+
       const source = this.sourceTerminal;
 
       // Cancel if clicked the same terminal
@@ -672,6 +789,15 @@ export class ConnectionEngine {
     this.snapTarget = null;
     this.hoveredTerminal = null;
     this.lastConnectionFinishTime = Date.now();
+
+    if (this.isReconnectingEndpoint && this.reconnectingConn) {
+      const origPath = document.getElementById(`wire-${this.reconnectingConn.id}`);
+      if (origPath) origPath.style.opacity = "";
+    }
+    this.isReconnectingEndpoint = false;
+    this.reconnectingConn = null;
+    this.detachedEnd = null;
+    this.originalTarget = null;
     
     if (this.snapIndicator) {
       this.snapIndicator.style.display = "none";
@@ -806,6 +932,21 @@ export class ConnectionEngine {
     };
   }
 
+  computeFlexibleCablePath(p1, p2) {
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    const dist = Math.hypot(dx, dy);
+
+    // Natural responsive elastic sag curve
+    const sag = Math.min(55, Math.max(12, dist * 0.16));
+    const cp1x = Math.round(p1.x + dx * 0.25);
+    const cp1y = Math.round(p1.y + sag + (dy > 0 ? dy * 0.12 : -dy * 0.08));
+    const cp2x = Math.round(p2.x - dx * 0.25);
+    const cp2y = Math.round(p2.y + sag - (dy > 0 ? dy * 0.08 : -dy * 0.12));
+
+    return `M ${p1.x} ${p1.y} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
+  }
+
   computeOrthogonalPath(p1, p2, waypoints = []) {
     if (!p1 || !p2) return "";
 
@@ -820,6 +961,9 @@ export class ConnectionEngine {
   }
 
   drawWirePreview() {
+    if (!this.wirePreview) {
+      this.wirePreview = document.getElementById("wire-preview");
+    }
     if (!this.wirePreview) return;
     if (!this.isConnecting || !this.sourceTerminal) {
       this.wirePreview.style.display = "none";
@@ -830,7 +974,11 @@ export class ConnectionEngine {
     const p1 = { x: this.sourceTerminal.worldX, y: this.sourceTerminal.worldY };
     const p2 = this.currentMousePos;
 
-    this.wirePreview.setAttribute("d", this.computeOrthogonalPath(p1, p2, this.waypoints));
+    if (this.waypoints.length === 0) {
+      this.wirePreview.setAttribute("d", `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y}`);
+    } else {
+      this.wirePreview.setAttribute("d", this.computeOrthogonalPath(p1, p2, this.waypoints));
+    }
     this.wirePreview.style.display = "block";
   }
 
@@ -913,6 +1061,25 @@ export class ConnectionEngine {
       }, { passive: false });
 
       this.wiresGroup.appendChild(path);
+
+      // Render solid metallic terminal plugs at connection endpoints
+      if (!conn.from.isWireBranch && !conn.from.isHanging) {
+        const plugFrom = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        plugFrom.setAttribute("cx", p1.x);
+        plugFrom.setAttribute("cy", p1.y);
+        plugFrom.setAttribute("r", "5");
+        plugFrom.setAttribute("class", "wire-terminal-plug");
+        this.wiresGroup.appendChild(plugFrom);
+      }
+
+      if (!conn.to.isWireBranch && !conn.to.isHanging) {
+        const plugTo = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        plugTo.setAttribute("cx", p2.x);
+        plugTo.setAttribute("cy", p2.y);
+        plugTo.setAttribute("r", "5");
+        plugTo.setAttribute("class", "wire-terminal-plug");
+        this.wiresGroup.appendChild(plugTo);
+      }
 
       // Render Cut / Hanging Wire Endpoint Node
       if (conn.to?.isHanging) {

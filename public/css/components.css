@@ -1000,135 +1000,48 @@
   pointer-events: none;
 }
 
-.circuit-wire.wire-cut-preview {
-  stroke: #ef4444 !important;
-  stroke-width: 4px !important;
-  stroke-dasharray: 6, 6 !important;
-  animation: wireCutPulse 0.6s infinite linear !important;
-  filter: drop-shadow(0 0 10px rgba(239, 68, 68, 0.9)) !important;
-}
-
-@keyframes wireCutPulse {
-  to {
-    stroke-dashoffset: -12;
-  }
-}
-
 .probe-assembly {
   position: absolute;
-  transform: translate(-50%, -50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  width: 24px;
+  height: 52px;
   pointer-events: auto !important;
   cursor: grab;
   z-index: 50;
   touch-action: none !important;
   user-select: none;
+  transform-origin: 12px 52px;
 }
 
 .probe-touch-hitbox {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 48px;
-  height: 56px;
+  top: -8px;
+  left: -8px;
+  width: 40px;
+  height: 68px;
   background: transparent;
   pointer-events: auto !important;
   cursor: grab;
   z-index: 10;
 }
 
-.probe-assembly:hover {
-  filter: drop-shadow(0 0 8px rgba(56, 189, 248, 1));
+.probe-svg-visual {
+  display: block;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.45));
+  transition: filter 0.15s ease;
+}
+
+.probe-assembly:hover .probe-svg-visual {
+  filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.95)) drop-shadow(0 2px 5px rgba(0, 0, 0, 0.5));
 }
 
 .probe-assembly.is-dragging {
   cursor: grabbing !important;
-  filter: drop-shadow(0 0 14px rgba(56, 189, 248, 1)) !important;
-  transform: translate(-50%, -50%) scale(1.15);
   z-index: 70;
-  transition: none !important;
 }
 
-/* Molded Finger Guard */
-.probe-finger-guard {
-  width: 20px;
-  height: 4.5px;
-  border-radius: 2px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-  margin-bottom: -1px;
-  z-index: 3;
-}
-
-.guard-black {
-  background: #0f172a;
-  border: 1px solid #334155;
-}
-
-.guard-red {
-  background: #dc2626;
-  border: 1px solid #991b1b;
-}
-
-.probe-body-collar {
-  width: 14px;
-  height: 16px;
-  border-radius: 3px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
-  position: relative;
-  z-index: 2;
-}
-
-.collar-black {
-  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
-  border: 1.5px solid #020617;
-}
-
-.collar-red {
-  background: linear-gradient(180deg, #ef4444 0%, #b91c1c 100%);
-  border: 1.5px solid #7f1d1d;
-}
-
-.probe-lead-label {
-  font-family: var(--font-mono), monospace;
-  font-size: 5.5px;
-  font-weight: 900;
-  color: #ffffff;
-  pointer-events: none;
-  letter-spacing: 0.02em;
-}
-
-.probe-grip {
-  width: 9px;
-  height: 11px;
-  border-radius: 1px;
-  margin-top: -1px;
-}
-
-.grip-black {
-  background: #0f172a;
-  border: 1px solid #020617;
-}
-
-.grip-red {
-  background: #dc2626;
-  border: 1px solid #7f1d1d;
-}
-
-/* Slender Tapered Metallic Needle Tip */
-.probe-pin-needle {
-  width: 2.5px;
-  height: 14px;
-  background: linear-gradient(90deg, #ffffff 0%, #cbd5e1 50%, #64748b 100%);
-  clip-path: polygon(0 0, 100% 0, 75% 100%, 25% 100%);
-  border-radius: 0 0 1px 1px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
-  margin-top: -1px;
+.probe-assembly.is-dragging .probe-svg-visual {
+  filter: drop-shadow(0 0 14px rgba(56, 189, 248, 1)) drop-shadow(0 4px 10px rgba(0, 0, 0, 0.6)) !important;
 }
 
 /* Multimeter Terminal Overlay */
