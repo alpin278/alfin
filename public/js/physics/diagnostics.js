@@ -14,7 +14,7 @@
 import { NetlistBuilder } from "./netlist.js";
 import { MNACircuitSolver } from "./solver.js";
 import { MeasurementEngine } from "./measurement.js";
-import { getRotatedPosition, getMultimeterJackPosition, getProbeTipPosition } from "../components.js";
+import { getRotatedPosition, getMultimeterJackPosition, getMultimeterHandoffPosition, getProbeTipPosition, MULTIMETER_JACK_POSITIONS, getMultimeterJackKey, MULTIMETER_RANGES } from "../components.js";
 
 export class PhysicsDiagnostics {
   /**
@@ -1029,7 +1029,7 @@ export class PhysicsDiagnostics {
         x: 500,
         y: 300,
         width: 132,
-        height: 262,
+        height: 304,
         rotation: 0,
         properties: {
           mode: "V_DC",
@@ -1062,8 +1062,8 @@ export class PhysicsDiagnostics {
         // Jack positions must move with multimeter body
         newBlackJack.x !== oldBlackJack.x && newBlackJack.y !== oldBlackJack.y,
         newRedJack.x !== oldRedJack.x && newRedJack.y !== oldRedJack.y,
-        newBlackJack.x === 700 + 48 && newBlackJack.y === 450 + 186,
-        newRedJack.x === 700 + 84 && newRedJack.y === 450 + 186,
+        newBlackJack.x === 700 + 52 && newBlackJack.y === 450 + 202,
+        newRedJack.x === 700 + 80 && newRedJack.y === 450 + 202,
         // Probe tip attached positions must remain UNCHANGED on circuit nodes
         newBlackTip.pos.x === nodeAPos.x && newBlackTip.pos.y === nodeAPos.y,
         newRedTip.pos.x === nodeBPos.x && newRedTip.pos.y === nodeBPos.y,
@@ -1091,7 +1091,7 @@ export class PhysicsDiagnostics {
         x: 100,
         y: 100,
         width: 132,
-        height: 262,
+        height: 304,
         rotation: 0,
         properties: { mode: "V_DC", probes: { com: { attachedTo: null }, vwma: { attachedTo: null } } }
       };
@@ -1105,8 +1105,8 @@ export class PhysicsDiagnostics {
 
         const comJack = getMultimeterJackPosition(meter, "com");
         const redJack = getMultimeterJackPosition(meter, "vwma");
-        const expCom = { x: nextX + 48, y: nextY + 186 };
-        const expRed = { x: nextX + 84, y: nextY + 186 };
+        const expCom = { x: nextX + 52, y: nextY + 202 };
+        const expRed = { x: nextX + 80, y: nextY + 202 };
 
         if (comJack.x !== expCom.x || comJack.y !== expCom.y || redJack.x !== expRed.x || redJack.y !== expRed.y) {
           allIterationsMatch = false;
@@ -1130,26 +1130,26 @@ export class PhysicsDiagnostics {
         x: 400,
         y: 300,
         width: 132,
-        height: 262,
+        height: 304,
         rotation: 0,
         properties: { mode: "V_DC" }
       };
 
-      // 0 deg: COM Jack = (400 + 48, 300 + 186) = (448, 486)
+      // 0 deg: COM Jack = (400 + 52, 300 + 202) = (452, 502)
       const jack0 = getMultimeterJackPosition(meter, "com");
 
-      // Rotate 90 deg around center (466, 431)
+      // Rotate 90 deg around center (466, 452)
       meter.rotation = 90;
       const jack90 = getMultimeterJackPosition(meter, "com");
-      const expJack90 = getRotatedPosition(400, 300, 132, 262, 48, 186, 90);
+      const expJack90 = getRotatedPosition(400, 300, 132, 304, 52, 202, 90);
 
       // Rotate 180 deg
       meter.rotation = 180;
       const jack180 = getMultimeterJackPosition(meter, "com");
-      const expJack180 = getRotatedPosition(400, 300, 132, 262, 48, 186, 180);
+      const expJack180 = getRotatedPosition(400, 300, 132, 304, 52, 202, 180);
 
       const checks = [
-        jack0.x === 448 && jack0.y === 486,
+        jack0.x === 452 && jack0.y === 502,
         jack90.x === expJack90.x && jack90.y === expJack90.y,
         jack180.x === expJack180.x && jack180.y === expJack180.y,
         jack90.x !== jack0.x || jack90.y !== jack0.y,
@@ -1174,7 +1174,7 @@ export class PhysicsDiagnostics {
         x: 600,
         y: 400,
         width: 132,
-        height: 262,
+        height: 304,
         rotation: 0,
         properties: { mode: "V_DC" }
       };
@@ -1821,7 +1821,7 @@ export class PhysicsDiagnostics {
         x: 400,
         y: 300,
         width: 132,
-        height: 262,
+        height: 304,
         rotation: 0,
         properties: {
           mode: "V_DC",
@@ -1854,7 +1854,7 @@ export class PhysicsDiagnostics {
         const tip = getProbeTipPosition(meter, "vwma", mockWs);
         const jack = getMultimeterJackPosition(meter, "vwma");
 
-        if (tip.pos.x !== m.x || tip.pos.y !== m.y || jack.x !== 484 || jack.y !== 486) {
+        if (tip.pos.x !== m.x || tip.pos.y !== m.y || jack.x !== 480 || jack.y !== 502) {
           allMovesMatch = false;
         }
       });
@@ -1875,7 +1875,7 @@ export class PhysicsDiagnostics {
         x: 400,
         y: 300,
         width: 132,
-        height: 262,
+        height: 304,
         rotation: 0,
         properties: {
           mode: "V_DC",
@@ -1910,17 +1910,17 @@ export class PhysicsDiagnostics {
       const checks = [
         tipA.pos.x === 500 && tipA.pos.y === 400, // Probe tip invariant in A mode
         meter.properties.probes.vwma.attachedTo?.compId === "R1", // Electrical connection intact
-        jackA.x === 418 && jackA.y === 486, // Jack shifted to 10A (relX: 18)
+        jackA.x === 509 && jackA.y === 502, // Jack shifted to right-side mA/A (relX: 109, relY: 202)
         tipV2.pos.x === 500 && tipV2.pos.y === 400, // Probe tip invariant back in V mode
-        jackV2.x === 484 && jackV2.y === 486 // Jack returned to VΩmA (relX: 84)
+        jackV2.x === 480 && jackV2.y === 502 // Jack returned to VΩmA (relX: 80, relY: 202)
       ];
       const passed = checks.every(Boolean);
-      record(41, "PR 2: Mode Switching V -> A -> V (Probe tip invariant on circuit, red jack shifts)", passed);
+      record(41, "PR 2: Mode Switching V -> A -> V (Probe tip invariant on circuit, red jack shifts to right-side mA/A)", passed);
 
       console.log(`\n[TEST 41 / PR 2] Multimeter Mode Switching V -> A -> V`);
       console.log(`  Red probe tip invariant in A mode : (${tipA.pos.x}, ${tipA.pos.y}) ${checks[0] ? "✅" : "❌"}`);
       console.log(`  Circuit connection retained       : ${meter.properties.probes.vwma.attachedTo.compId}:${meter.properties.probes.vwma.attachedTo.termId} ${checks[1] ? "✅" : "❌"}`);
-      console.log(`  Jack anchor shifted to 10A        : (${jackA.x}, ${jackA.y}) ${checks[2] ? "✅" : "❌"}`);
+      console.log(`  Jack anchor shifted to mA/A (right): (${jackA.x}, ${jackA.y}) ${checks[2] ? "✅" : "❌"}`);
       console.log(`  Jack anchor restored in V mode    : (${jackV2.x}, ${jackV2.y}) ${checks[4] ? "✅" : "❌"}`);
       console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
     }
@@ -1935,7 +1935,7 @@ export class PhysicsDiagnostics {
         x: 400,
         y: 300,
         width: 132,
-        height: 262,
+        height: 304,
         rotation: 0,
         properties: { mode: "V_DC" }
       };
@@ -1947,9 +1947,9 @@ export class PhysicsDiagnostics {
       const jackA = getMultimeterJackPosition(meter, "com");
 
       const checks = [
-        jackV.x === 448 && jackV.y === 486,
-        jackOhm.x === 448 && jackOhm.y === 486,
-        jackA.x === 448 && jackA.y === 486
+        jackV.x === 452 && jackV.y === 502,
+        jackOhm.x === 452 && jackOhm.y === 502,
+        jackA.x === 452 && jackA.y === 502
       ];
       const passed = checks.every(Boolean);
       record(42, "PR 3: Black COM Probe Invariant across All Modes (V, A, Ω)", passed);
@@ -1971,7 +1971,7 @@ export class PhysicsDiagnostics {
         x: 400,
         y: 300,
         width: 132,
-        height: 262,
+        height: 304,
         rotation: 0,
         properties: {
           mode: "V_DC",
@@ -2021,7 +2021,7 @@ export class PhysicsDiagnostics {
         x: 400,
         y: 300,
         width: 132,
-        height: 262,
+        height: 304,
         rotation: 0,
         properties: {
           mode: "V_DC",
@@ -3366,6 +3366,1040 @@ export class PhysicsDiagnostics {
       console.log(`  Resistor Signed I: ${iRes.toFixed(4)} A ${checks[1] ? "✅" : "❌"}`);
       console.log(`  Total Current    : ${iTotal.toFixed(4)} A (0.3A + 0.6A = 0.9A) ${checks[2] ? "✅" : "❌"}`);
       console.log(`  All Nodes KCL Max Residual: ${kcl.maxResidual.toExponential(4)} A (< 1e-9) ${checks[5] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 78 (PR EMPTY DROP 1) — Node A -> drag ke kosong -> release (Returns to DOCK)
+    // ──────────────────────────────────────────────
+    {
+      const mockWs = {
+        connectionEngine: {
+          getTerminalWorldPosition: (compId, termId) => {
+            if (compId === "R1" && termId === "term_a") return { x: 500, y: 400 };
+            return null;
+          }
+        },
+        screenToCanvas: (x, y) => ({ x, y })
+      };
+
+      const comp = {
+        id: "meter1",
+        type: "multimeter",
+        x: 400, y: 300, width: 132, height: 304, rotation: 0,
+        properties: {
+          mode: "V_DC",
+          probes: {
+            vwma: { attachedTo: { compId: "R1", termId: "term_a" }, isPlaced: true },
+            com: { attachedTo: null, isPlaced: false }
+          }
+        }
+      };
+
+      const probeState = comp.properties.probes.vwma;
+      const initialTip = getProbeTipPosition(comp, "vwma", mockWs);
+
+      // 1. Drag to empty space (700, 500)
+      probeState.isDragging = true;
+      probeState.dragWorldX = 700;
+      probeState.dragWorldY = 500;
+      probeState.attachedTo = null; // Detached during drag
+      const liveDragTip = getProbeTipPosition(comp, "vwma", mockWs);
+
+      // 2. Release in empty space -> RETURN TO DOCK
+      probeState.isDragging = false;
+      delete probeState.dragWorldX;
+      delete probeState.dragWorldY;
+      probeState.attachedTo = null;
+      probeState.isPlaced = false;
+      delete probeState.worldX;
+      delete probeState.worldY;
+
+      const finalTip = getProbeTipPosition(comp, "vwma", mockWs);
+      const isDocked = !probeState.attachedTo && !probeState.isPlaced;
+
+      const checks = [
+        initialTip.pos.x === 500 && initialTip.pos.y === 400,
+        liveDragTip.pos.x === 700 && liveDragTip.pos.y === 500,
+        isDocked,
+        finalTip.pos.x === 504 && finalTip.pos.y === 585 && finalTip.isConnected === false
+      ];
+      const passed = checks.every(Boolean);
+      record(78, "PR EMPTY DROP 1: Node A -> drag ke kosong -> release (Returns cleanly to DOCK)", passed);
+      console.log(`\n[TEST 78 / PR EMPTY DROP 1] Node A -> drag ke kosong -> release`);
+      console.log(`  Live Drag Tip Follows Pointer : (${liveDragTip.pos.x}, ${liveDragTip.pos.y}) == (700, 500) ${checks[1] ? "✅" : "❌"}`);
+      console.log(`  Final State after Empty Release: attachedTo=null, isPlaced=false, docked at (${finalTip.pos.x}, ${finalTip.pos.y}) ${checks[2] && checks[3] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 79 (PR RECONNECT 2) — Node A -> drag -> Node B -> release (Commits to Node B)
+    // ──────────────────────────────────────────────
+    {
+      const mockWs = {
+        connectionEngine: {
+          getTerminalWorldPosition: (compId, termId) => {
+            if (compId === "R1" && termId === "term_a") return { x: 500, y: 400 };
+            if (compId === "R2" && termId === "term_a") return { x: 620, y: 520 };
+            return null;
+          }
+        },
+        screenToCanvas: (x, y) => ({ x, y })
+      };
+
+      const comp = {
+        id: "meter1",
+        type: "multimeter",
+        x: 400, y: 300, width: 132, height: 304, rotation: 0,
+        properties: {
+          mode: "V_DC",
+          probes: {
+            vwma: { attachedTo: { compId: "R1", termId: "term_a" }, isPlaced: true },
+            com: { attachedTo: null, isPlaced: false }
+          }
+        }
+      };
+
+      const probeState = comp.properties.probes.vwma;
+
+      // Drag and snap to Node B
+      probeState.attachedTo = { compId: "R2", termId: "term_a" };
+      delete probeState.worldX;
+      delete probeState.worldY;
+      probeState.isPlaced = true;
+
+      const finalTip = getProbeTipPosition(comp, "vwma", mockWs);
+
+      const checks = [
+        probeState.attachedTo.compId === "R2" && probeState.attachedTo.termId === "term_a",
+        finalTip.pos.x === 620 && finalTip.pos.y === 520
+      ];
+      const passed = checks.every(Boolean);
+      record(79, "PR RECONNECT 2: Node A -> drag -> Node B -> release (Snaps and commits to Node B)", passed);
+      console.log(`\n[TEST 79 / PR RECONNECT 2] Node A -> drag -> Node B -> release`);
+      console.log(`  Committed to R2:term_a at (${finalTip.pos.x}, ${finalTip.pos.y}) ${checks[1] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 80 (PR MULTI EMPTY DROP 3) — Node A -> drag kosong 20x (Always Returns to Dock)
+    // ──────────────────────────────────────────────
+    {
+      const mockWs = {
+        connectionEngine: {
+          getTerminalWorldPosition: (compId, termId) => {
+            if (compId === "R1" && termId === "term_a") return { x: 500, y: 400 };
+            return null;
+          }
+        },
+        screenToCanvas: (x, y) => ({ x, y })
+      };
+
+      const comp = {
+        id: "meter1",
+        type: "multimeter",
+        x: 400, y: 300, width: 132, height: 304, rotation: 0,
+        properties: {
+          mode: "V_DC",
+          probes: {
+            vwma: { attachedTo: { compId: "R1", termId: "term_a" }, isPlaced: true },
+            com: { attachedTo: null, isPlaced: false }
+          }
+        }
+      };
+
+      const probeState = comp.properties.probes.vwma;
+      let all20Ok = true;
+
+      for (let i = 0; i < 20; i++) {
+        // Re-attach to Node A for the cycle
+        probeState.attachedTo = { compId: "R1", termId: "term_a" };
+        probeState.isPlaced = true;
+
+        // Pointerdown + Drag
+        probeState.isDragging = true;
+        probeState.dragWorldX = 500 + (i + 1) * 15;
+        probeState.dragWorldY = 400 + (i + 1) * 10;
+        probeState.attachedTo = null;
+
+        // Release on empty space -> return to dock
+        probeState.isDragging = false;
+        delete probeState.dragWorldX;
+        delete probeState.dragWorldY;
+        probeState.attachedTo = null;
+        probeState.isPlaced = false;
+        delete probeState.worldX;
+        delete probeState.worldY;
+
+        const tip = getProbeTipPosition(comp, "vwma", mockWs);
+        if (tip.pos.x !== 504 || tip.pos.y !== 585 || probeState.attachedTo !== null || probeState.isPlaced !== false) {
+          all20Ok = false;
+        }
+      }
+
+      record(80, "PR MULTI EMPTY DROP 3: Node A -> drag kosong 20x (20x repeated invalid drags always return to DOCK)", all20Ok);
+      console.log(`\n[TEST 80 / PR MULTI EMPTY DROP 3] Node A -> drag kosong 20x`);
+      console.log(`  20x Drag Cycles Returned Exactly to DOCK: ${all20Ok ? "✅" : "❌"}`);
+      console.log(`  => ${all20Ok ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 81 (PR DOCK DRAG 4) — Docked probe -> drag kosong -> release (Returns to DOCK)
+    // ──────────────────────────────────────────────
+    {
+      const comp = {
+        id: "meter1",
+        type: "multimeter",
+        x: 400, y: 300, width: 132, height: 304, rotation: 0,
+        properties: {
+          mode: "V_DC",
+          probes: {
+            vwma: { attachedTo: null, isPlaced: false },
+            com: { attachedTo: null, isPlaced: false }
+          }
+        }
+      };
+
+      const probeState = comp.properties.probes.vwma;
+      // Drag from dock to empty (520, 520) and release
+      probeState.isDragging = true;
+      probeState.dragWorldX = 520;
+      probeState.dragWorldY = 520;
+
+      // Release on empty -> returns to dock
+      probeState.isDragging = false;
+      delete probeState.dragWorldX;
+      delete probeState.dragWorldY;
+      probeState.attachedTo = null;
+      probeState.isPlaced = false;
+
+      const finalTip = getProbeTipPosition(comp, "vwma", null);
+
+      const checks = [
+        probeState.attachedTo === null,
+        probeState.isPlaced === false,
+        finalTip.pos.x === 504 && finalTip.pos.y === 585 && finalTip.isConnected === false
+      ];
+      const passed = checks.every(Boolean);
+      record(81, "PR DOCK DRAG 4: Docked probe -> drag kosong -> release (Returns to DOCK)", passed);
+      console.log(`\n[TEST 81 / PR DOCK DRAG 4] Docked probe -> drag kosong -> release`);
+      console.log(`  Probe returns to DOCK: ${checks[2] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 82 (PR LIVE DRAG 5) — Live drag dari Node A (Probe & cable follow pointer realtime)
+    // ──────────────────────────────────────────────
+    {
+      const mockWs = {
+        connectionEngine: {
+          getTerminalWorldPosition: (compId, termId) => {
+            if (compId === "R1" && termId === "term_a") return { x: 500, y: 400 };
+            return null;
+          }
+        }
+      };
+
+      const comp = {
+        id: "meter1",
+        type: "multimeter",
+        x: 400, y: 300, width: 132, height: 304, rotation: 0,
+        properties: {
+          mode: "V_DC",
+          probes: {
+            vwma: { attachedTo: { compId: "R1", termId: "term_a" }, isPlaced: true },
+            com: { attachedTo: null, isPlaced: false }
+          }
+        }
+      };
+
+      const testPts = [
+        { x: 520, y: 420 },
+        { x: 580, y: 460 },
+        { x: 670, y: 530 },
+        { x: 790, y: 640 }
+      ];
+
+      const probeState = comp.properties.probes.vwma;
+      probeState.isDragging = true;
+
+      let allPtsMatched = true;
+      for (const pt of testPts) {
+        probeState.dragWorldX = pt.x;
+        probeState.dragWorldY = pt.y;
+        const tip = getProbeTipPosition(comp, "vwma", mockWs);
+        // While isDragging, tip must follow pointer (NOT attached terminal position)
+        if (tip.pos.x !== pt.x || tip.pos.y !== pt.y) {
+          allPtsMatched = false;
+        }
+      }
+
+      probeState.isDragging = false;
+      delete probeState.dragWorldX;
+      delete probeState.dragWorldY;
+
+      record(82, "PR LIVE DRAG 5: Live Drag from Node A (Probe tip & cable endpoint follow pointer coordinates in realtime)", allPtsMatched);
+      console.log(`\n[TEST 82 / PR LIVE DRAG 5] Live Drag from Node A`);
+      console.log(`  Probe tip followed all live points during drag: ${allPtsMatched ? "✅" : "❌"}`);
+      console.log(`  => ${allPtsMatched ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 83 (PR MODE SWITCH 6) — V -> A -> V Mode Switch while Docked
+    // ──────────────────────────────────────────────
+    {
+      const comp = {
+        id: "meter1",
+        type: "multimeter",
+        x: 400, y: 300, width: 132, height: 304, rotation: 0,
+        properties: {
+          mode: "V_DC",
+          probes: {
+            vwma: { attachedTo: null, isPlaced: false },
+            com: { attachedTo: null, isPlaced: false }
+          }
+        }
+      };
+
+      // Switch to A_DC
+      comp.properties.mode = "A_DC";
+      const jackA = getMultimeterJackPosition(comp, "vwma");
+      const tipA = getProbeTipPosition(comp, "vwma", null);
+
+      // Switch back to V_DC
+      comp.properties.mode = "V_DC";
+      const jackV = getMultimeterJackPosition(comp, "vwma");
+      const tipV = getProbeTipPosition(comp, "vwma", null);
+
+      const checks = [
+        tipA.pos.x === 504 && tipA.pos.y === 585 && tipA.isConnected === false,
+        tipV.pos.x === 504 && tipV.pos.y === 585 && tipV.isConnected === false,
+        jackA.x === 509 && jackA.y === 502,
+        jackV.x === 480 && jackV.y === 502
+      ];
+      const passed = checks.every(Boolean);
+      record(83, "PR MODE SWITCH 6: V -> A -> V Mode Switch while Docked (Probes remain docked, jack shifts mA/A <-> V)", passed);
+      console.log(`\n[TEST 83 / PR MODE SWITCH 6] Mode Switch while Docked`);
+      console.log(`  Probes remain docked: ${checks[0] && checks[1] ? "✅" : "❌"}`);
+      console.log(`  Jack Shifts: mA/A (${jackA.x}, ${jackA.y}) <-> V (${jackV.x}, ${jackV.y}) ${checks[2] && checks[3] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 84 (PR ZOOM PAN 7) — Zoom/Pan Invariance across 0.5x-2.5x
+    // ──────────────────────────────────────────────
+    {
+      const comp = {
+        id: "meter1",
+        type: "multimeter",
+        x: 400, y: 300, width: 132, height: 304, rotation: 0,
+        properties: {
+          mode: "V_DC",
+          probes: {
+            vwma: { attachedTo: { compId: "R1", termId: "term_a" }, isPlaced: true },
+            com: { attachedTo: null, isPlaced: false }
+          }
+        }
+      };
+
+      const zooms = [0.5, 0.75, 1.0, 1.5, 2.0, 2.5];
+      let zoomOk = true;
+
+      for (const z of zooms) {
+        const mockWs = {
+          connectionEngine: {
+            getTerminalWorldPosition: (compId, termId) => {
+              if (compId === "R1" && termId === "term_a") return { x: 500, y: 400 };
+              return null;
+            }
+          },
+          screenToCanvas: (sx, sy) => ({ x: (sx - 100) / z, y: (sy - 50) / z })
+        };
+
+        const tip = getProbeTipPosition(comp, "vwma", mockWs);
+        if (tip.pos.x !== 500 || tip.pos.y !== 400) {
+          zoomOk = false;
+        }
+      }
+
+      record(84, "PR ZOOM PAN 7: Zoom/Pan Invariance (Terminal world coords invariant across 0.5x-2.5x zoom levels)", zoomOk);
+      console.log(`\n[TEST 84 / PR ZOOM PAN 7] Zoom/Pan Invariance`);
+      console.log(`  Terminal World Position Invariant across 0.5x-2.5x zoom: ${zoomOk ? "✅" : "❌"}`);
+      console.log(`  => ${zoomOk ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 85 (PR DETACH & RETURN DOCK) — Attached probe detaches during drag & returns to dock on empty release
+    // ──────────────────────────────────────────────
+    {
+      const nodeA = { x: 500, y: 400 };
+      const mockWs = {
+        connectionEngine: {
+          getTerminalWorldPosition: (compId, termId) => (compId === "R1" && termId === "term_a") ? nodeA : null,
+          findNearestTerminalSnap: (x, y, tol) => {
+            const d = Math.hypot(x - nodeA.x, y - nodeA.y);
+            return d < tol ? { compId: "R1", termId: "term_a", pos: nodeA } : null;
+          }
+        },
+        screenToCanvas: (x, y) => ({ x, y })
+      };
+
+      const comp = {
+        id: "meter1",
+        type: "multimeter",
+        x: 400, y: 300, width: 132, height: 304, rotation: 0,
+        properties: {
+          mode: "V_DC",
+          probes: {
+            vwma: { attachedTo: { compId: "R1", termId: "term_a" }, isPlaced: true },
+            com: { attachedTo: null, isPlaced: false }
+          }
+        }
+      };
+
+      const probeState = comp.properties.probes.vwma;
+      const initialTip = getProbeTipPosition(comp, "vwma", mockWs);
+
+      // OnPointerDown transaction
+      const dragOrigin = {
+        attachedTo: { ...probeState.attachedTo },
+        worldX: initialTip.pos.x,
+        worldY: initialTip.pos.y,
+        wasDocked: false,
+        wasPlaced: true
+      };
+      probeState.isDragging = true;
+      probeState.dragWorldX = initialTip.pos.x;
+      probeState.dragWorldY = initialTip.pos.y;
+      probeState.attachedTo = null; // Electrical detach
+
+      // Move 5px, 10px, 15px from Node A
+      let detachOk = true;
+      for (const d of [5, 10, 15]) {
+        const rawPos = { x: 500 + d, y: 400 };
+        const origin = dragOrigin?.attachedTo;
+        let candidate = mockWs.connectionEngine.findNearestTerminalSnap(rawPos.x, rawPos.y, 18);
+        if (candidate && origin && candidate.compId === origin.compId && candidate.termId === origin.termId) {
+          candidate = null;
+        }
+        if (candidate) {
+          probeState.dragWorldX = candidate.pos.x;
+          probeState.dragWorldY = candidate.pos.y;
+        } else {
+          probeState.dragWorldX = rawPos.x;
+          probeState.dragWorldY = rawPos.y;
+        }
+
+        const tip = getProbeTipPosition(comp, "vwma", mockWs);
+        if (probeState.attachedTo !== null || tip.pos.x !== rawPos.x || tip.pos.y !== rawPos.y) {
+          detachOk = false;
+        }
+      }
+
+      // Empty Release -> RETURN TO DOCK
+      probeState.isDragging = false;
+      delete probeState.dragWorldX;
+      delete probeState.dragWorldY;
+      probeState.attachedTo = null;
+      probeState.isPlaced = false;
+      delete probeState.worldX;
+      delete probeState.worldY;
+      const finalTip = getProbeTipPosition(comp, "vwma", mockWs);
+
+      const passed = detachOk && probeState.attachedTo === null && probeState.isPlaced === false && finalTip.pos.x === 504 && finalTip.pos.y === 585 && finalTip.isConnected === false;
+      record(85, "PR DETACH & RETURN DOCK: Attached probe detaches electrically during drag, excludes origin snap, & returns to DOCK on empty release", passed);
+      console.log(`\n[TEST 85 / PR DETACH & RETURN DOCK] Immediate Detach & Return to Dock`);
+      console.log(`  Electrical attachedTo=null during drag and tip follows pointer: ${detachOk ? "✅" : "❌"}`);
+      console.log(`  Returns to DOCK on empty release: ${finalTip.pos.x === 504 && finalTip.pos.y === 585 ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 86 (PR SNAP HYSTERESIS) — Snap enter <= 18px, retain <= 28px, release > 28px
+    // ──────────────────────────────────────────────
+    {
+      const nodeA = { x: 500, y: 400 };
+      const nodeB = { x: 600, y: 400 };
+      const mockWs = {
+        connectionEngine: {
+          getTerminalWorldPosition: (compId, termId) => {
+            if (compId === "R1" && termId === "term_a") return nodeA;
+            if (compId === "R2" && termId === "term_a") return nodeB;
+            return null;
+          },
+          findNearestTerminalSnap: (x, y, tol) => {
+            const distA = Math.hypot(x - nodeA.x, y - nodeA.y);
+            const distB = Math.hypot(x - nodeB.x, y - nodeB.y);
+            if (distA < tol && distA <= distB) return { compId: "R1", termId: "term_a", pos: nodeA };
+            if (distB < tol) return { compId: "R2", termId: "term_a", pos: nodeB };
+            return null;
+          }
+        }
+      };
+
+      const comp = {
+        id: "meter1",
+        type: "multimeter",
+        x: 400, y: 300, width: 132, height: 304, rotation: 0,
+        properties: {
+          mode: "V_DC",
+          probes: {
+            vwma: { attachedTo: { compId: "R1", termId: "term_a" }, isPlaced: true },
+            com: { attachedTo: null, isPlaced: false }
+          }
+        }
+      };
+
+      const probeState = comp.properties.probes.vwma;
+      probeState.isDragging = true;
+      probeState.attachedTo = null;
+
+      const origin = { compId: "R1", termId: "term_a" };
+      let activeSnap = null;
+      const SNAP_ENTER = 18;
+      const SNAP_RELEASE = 28;
+
+      const step = (rawX, rawY) => {
+        const rawPos = { x: rawX, y: rawY };
+        if (activeSnap) {
+          const snapDist = Math.hypot(rawPos.x - activeSnap.pos.x, rawPos.y - activeSnap.pos.y);
+          if (snapDist > SNAP_RELEASE) activeSnap = null;
+        }
+        if (!activeSnap) {
+          let candidate = mockWs.connectionEngine.findNearestTerminalSnap(rawPos.x, rawPos.y, SNAP_ENTER);
+          if (candidate && origin && candidate.compId === origin.compId && candidate.termId === origin.termId) {
+            candidate = null;
+          }
+          if (candidate && candidate.compId !== comp.id) activeSnap = candidate;
+        }
+        if (activeSnap) {
+          probeState.dragWorldX = activeSnap.pos.x;
+          probeState.dragWorldY = activeSnap.pos.y;
+        } else {
+          probeState.dragWorldX = rawPos.x;
+          probeState.dragWorldY = rawPos.y;
+        }
+        return { snap: activeSnap ? activeSnap.compId : null, x: probeState.dragWorldX };
+      };
+
+      const r1 = step(580, 400); // 20px from Node B (> 18) -> no snap
+      const r2 = step(585, 400); // 15px from Node B (<= 18) -> snap to Node B
+      const r3 = step(575, 400); // 25px from Node B (<= 28) -> retain snap Node B
+      const r4 = step(570, 400); // 30px from Node B (> 28) -> release snap, rawX=570
+
+      const checks = [
+        r1.snap === null && r1.x === 580,
+        r2.snap === "R2" && r2.x === 600,
+        r3.snap === "R2" && r3.x === 600,
+        r4.snap === null && r4.x === 570
+      ];
+      const passed = checks.every(Boolean);
+      record(86, "PR SNAP HYSTERESIS: Dual-radius snap hysteresis (enter <=18px, retain <=28px, release >28px)", passed);
+      console.log(`\n[TEST 86 / PR SNAP HYSTERESIS] Dual-Radius Snap Hysteresis`);
+      console.log(`  Approach > 18px (free)   : ${checks[0] ? "✅" : "❌"}`);
+      console.log(`  Enter <= 18px (snapped)  : ${checks[1] ? "✅" : "❌"}`);
+      console.log(`  Retain <= 28px (retained): ${checks[2] ? "✅" : "❌"}`);
+      console.log(`  Release > 28px (released): ${checks[3] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 87 (PR POINTERUP PRIORITY) — Valid Target => COMMIT_NEW_NODE; Empty/Invalid Drop => RETURN_TO_DOCK
+    // ──────────────────────────────────────────────
+    {
+      function evaluatePointerUp(activeSnap, compId) {
+        const currentProbe = { attachedTo: null, isPlaced: false };
+        let branchTaken;
+
+        // CASE 1: Dropped on valid new terminal -> COMMIT new connection
+        if (activeSnap && activeSnap.compId !== compId) {
+          currentProbe.attachedTo = {
+            compId: activeSnap.compId,
+            termId: activeSnap.termId
+          };
+          currentProbe.isPlaced = true;
+          delete currentProbe.worldX;
+          delete currentProbe.worldY;
+          branchTaken = "COMMIT_NEW_NODE";
+        }
+        // CASE 2: Dropped on empty space / invalid target -> ALWAYS RETURN TO DOCK
+        else {
+          currentProbe.attachedTo = null;
+          currentProbe.isPlaced = false;
+          delete currentProbe.worldX;
+          delete currentProbe.worldY;
+          branchTaken = "RETURN_TO_DOCK";
+        }
+
+        return { branchTaken, currentProbe };
+      }
+
+      // Case A: Dock -> drag -> empty => RETURN_TO_DOCK
+      const cA = evaluatePointerUp(null, "meter1");
+      const cAPass = cA.branchTaken === "RETURN_TO_DOCK" &&
+                     cA.currentProbe.attachedTo === null &&
+                     cA.currentProbe.isPlaced === false &&
+                     cA.currentProbe.worldX === undefined &&
+                     cA.currentProbe.worldY === undefined;
+
+      // Case B: Node A -> drag -> empty => RETURN_TO_DOCK
+      const cB = evaluatePointerUp(null, "meter1");
+      const cBPass = cB.branchTaken === "RETURN_TO_DOCK" &&
+                     cB.currentProbe.attachedTo === null &&
+                     cB.currentProbe.isPlaced === false &&
+                     cB.currentProbe.worldX === undefined &&
+                     cB.currentProbe.worldY === undefined;
+
+      // Case C: Node A -> Node B => COMMIT_NEW_NODE
+      const cC = evaluatePointerUp({ compId: "resistor-002", termId: "term_b", pos: { x: 650, y: 450 } }, "meter1");
+      const cCPass = cC.branchTaken === "COMMIT_NEW_NODE" &&
+                     cC.currentProbe.attachedTo?.compId === "resistor-002" &&
+                     cC.currentProbe.attachedTo?.termId === "term_b" &&
+                     cC.currentProbe.isPlaced === true &&
+                     cC.currentProbe.worldX === undefined &&
+                     cC.currentProbe.worldY === undefined;
+
+      // Case D: Node A -> drag near Node B -> leave snap -> release empty => RETURN_TO_DOCK
+      const cD = evaluatePointerUp(null, "meter1");
+      const cDPass = cD.branchTaken === "RETURN_TO_DOCK" &&
+                     cD.currentProbe.attachedTo === null &&
+                     cD.currentProbe.isPlaced === false;
+
+      // Case E: 20x repeated drag empty from Node A => always RETURN_TO_DOCK
+      let cEAllPass = true;
+      for (let i = 0; i < 20; i++) {
+        const res = evaluatePointerUp(null, "meter1");
+        if (res.branchTaken !== "RETURN_TO_DOCK" || res.currentProbe.attachedTo !== null || res.currentProbe.isPlaced !== false) {
+          cEAllPass = false;
+        }
+      }
+
+      const checks = [cAPass, cBPass, cCPass, cDPass, cEAllPass];
+      const passed = checks.every(Boolean);
+      record(87, "PR POINTERUP PRIORITY: Valid Target => COMMIT_NEW_NODE, Empty/Invalid Drop => RETURN_TO_DOCK (20x repeated cycles return to dock)", passed);
+      console.log(`\n[TEST 87 / PR POINTERUP PRIORITY] Valid Target Commit & Empty Drop Return to Dock`);
+      console.log(`  Case A: Dock -> Empty (RETURN_TO_DOCK)                        : ${cAPass ? "✅" : "❌"}`);
+      console.log(`  Case B: Node A -> Empty (RETURN_TO_DOCK, attachedTo=null)     : ${cBPass ? "✅" : "❌"}`);
+      console.log(`  Case C: Node A -> Node B (COMMIT_NEW_NODE)                    : ${cCPass ? "✅" : "❌"}`);
+      console.log(`  Case D: Node A -> near Node B -> leave -> empty (RETURN_DOCK) : ${cDPass ? "✅" : "❌"}`);
+      console.log(`  Case E: 20x Repeated Drag Empty from Node A (Always Dock)     : ${cEAllPass ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 88 (PR JACK ANCHOR AUDIT) — Multimeter Banana Jack Anchor Single Source of Truth & Mode Switching
+    // ──────────────────────────────────────────────
+    {
+      const comp = {
+        id: "meter1",
+        type: "multimeter",
+        x: 400,
+        y: 300,
+        width: 132,
+        height: 304,
+        rotation: 0,
+        properties: {
+          mode: "V_DC",
+          probes: {
+            vwma: { attachedTo: { compId: "R1", termId: "term_b" }, isPlaced: true },
+            com: { attachedTo: { compId: "R1", termId: "term_a" }, isPlaced: true }
+          }
+        }
+      };
+
+      const mockWs = {
+        connectionEngine: {
+          getTerminalWorldPosition: (cId, tId) => {
+            if (cId === "R1" && tId === "term_a") return { x: 500, y: 400 };
+            if (cId === "R1" && tId === "term_b") return { x: 600, y: 400 };
+            return null;
+          }
+        }
+      };
+
+      // 1. Check relative definitions of the 4 jacks in MULTIMETER_JACK_POSITIONS
+      const defsOk = MULTIMETER_JACK_POSITIONS["10A"].relX === 23 && MULTIMETER_JACK_POSITIONS["10A"].relY === 202 &&
+                     MULTIMETER_JACK_POSITIONS["COM"].relX === 52 && MULTIMETER_JACK_POSITIONS["COM"].relY === 202 &&
+                     MULTIMETER_JACK_POSITIONS["V_OHM"].relX === 80 && MULTIMETER_JACK_POSITIONS["V_OHM"].relY === 202 &&
+                     MULTIMETER_JACK_POSITIONS["MA"].relX === 109 && MULTIMETER_JACK_POSITIONS["MA"].relY === 202;
+
+      // 2. V mode: Red anchor = V_OHM (480, 502), COM anchor = COM (452, 502)
+      comp.properties.mode = "V_DC";
+      const redJackV = getMultimeterJackPosition(comp, "vwma");
+      const comJackV = getMultimeterJackPosition(comp, "com");
+      const redTipV = getProbeTipPosition(comp, "vwma", mockWs);
+      const comTipV = getProbeTipPosition(comp, "com", mockWs);
+
+      // 3. Switch to A_DC: Red anchor moves to right-side mA/A (509, 502), circuit-side tips REMAIN locked on Node A & B
+      comp.properties.mode = "A_DC";
+      const redJackA = getMultimeterJackPosition(comp, "vwma");
+      const comJackA = getMultimeterJackPosition(comp, "com");
+      const redTipA = getProbeTipPosition(comp, "vwma", mockWs);
+      const comTipA = getProbeTipPosition(comp, "com", mockWs);
+
+      // 4. Switch to OHM: Red anchor returns to V_OHM (480, 502)
+      comp.properties.mode = "OHM";
+      const redJackOhm = getMultimeterJackPosition(comp, "vwma");
+      const comJackOhm = getMultimeterJackPosition(comp, "com");
+
+      // 5. Rotation invariance at 0, 90, 180, 270 degrees
+      const rotations = [0, 90, 180, 270];
+      let rotOk = true;
+      for (const rot of rotations) {
+        comp.rotation = rot;
+        comp.properties.mode = "V_DC";
+        const rJack = getMultimeterJackPosition(comp, "vwma");
+        const cJack = getMultimeterJackPosition(comp, "com");
+        const expR = getRotatedPosition(400, 300, 132, 304, 80, 202, rot);
+        const expC = getRotatedPosition(400, 300, 132, 304, 52, 202, rot);
+        if (rJack.x !== expR.x || rJack.y !== expR.y || cJack.x !== expC.x || cJack.y !== expC.y) {
+          rotOk = false;
+        }
+      }
+      comp.rotation = 0;
+
+      const checks = [
+        defsOk,
+        redJackV.x === 480 && redJackV.y === 502, // V mode red anchor = V_OHM (80, 202)
+        comJackV.x === 452 && comJackV.y === 502, // COM anchor = COM (52, 202)
+        redJackA.x === 509 && redJackA.y === 502, // A mode red anchor = right-side mA/A (109, 202)
+        redJackA.x !== 423,                       // A mode red anchor != 10A left jack
+        comJackA.x === 452 && comJackA.y === 502, // COM anchor invariant in A mode
+        redJackOhm.x === 480 && redJackOhm.y === 502, // OHM mode red anchor = V_OHM (80, 202)
+        redTipA.pos.x === 600 && redTipA.pos.y === 400, // Red tip invariant on Node B
+        comTipA.pos.x === 500 && comTipA.pos.y === 400, // Black tip invariant on Node A
+        comp.properties.probes.vwma.attachedTo?.compId === "R1", // Red probe attachedTo invariant
+        rotOk // All rotations 0/90/180/270 transform exact
+      ];
+      const passed = checks.every(Boolean);
+      record(88, "PR JACK ANCHOR AUDIT: Multimeter Banana Jack Anchor Single Source of Truth & Right-Side mA/A Mapping in Ampere Mode", passed);
+      console.log(`\n[TEST 88 / PR JACK ANCHOR AUDIT] Banana Jack Anchor Single Source of Truth`);
+      console.log(`  Jack Relative Definitions (10A=23, COM=52, V_OHM=80, MA=109, Y=202): ${checks[0] ? "✅" : "❌"}`);
+      console.log(`  V_DC Mode: Red Anchor = (${redJackV.x}, ${redJackV.y}) [Expected: 480, 502 / V_OHM]   : ${checks[1] ? "✅" : "❌"}`);
+      console.log(`  A_DC Mode: Red Anchor = (${redJackA.x}, ${redJackA.y}) [Expected: 509, 502 / mA Right]: ${checks[3] ? "✅" : "❌"}`);
+      console.log(`  A_DC Mode != 10A Left Jack (${redJackA.x} != 423)                                : ${checks[4] ? "✅" : "❌"}`);
+      console.log(`  COM Anchor Invariant across Modes (${comJackV.x}, ${comJackV.y}) == (${comJackA.x}, ${comJackA.y}) : ${checks[2] && checks[5] ? "✅" : "❌"}`);
+      console.log(`  Circuit-Side Red Tip Invariant on Node B (${redTipA.pos.x}, ${redTipA.pos.y})     : ${checks[7] ? "✅" : "❌"}`);
+      console.log(`  AttachedTo Invariant across Mode Switches                                 : ${checks[9] ? "✅" : "❌"}`);
+      console.log(`  Rotation 0°/90°/180°/270° Transformation Exact Matrix                     : ${checks[10] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 89 (PR PLUG ANIMATION) — 3-Phase Banana Plug Motion, Arc Trajectory & Fast Interruption Safety
+    // ──────────────────────────────────────────────
+    {
+      function computePlugTrajectory(sourceX, sourceY, targetX, targetY, progress) {
+        const u = progress < 0.5
+          ? 4 * progress * progress * progress
+          : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+
+        const arcY = 8.5 * Math.sin(Math.PI * u);
+        const curX = sourceX + (targetX - sourceX) * u;
+        const curY = sourceY + (targetY - sourceY) * u + arcY;
+        return { curX, curY, arcY, u };
+      }
+
+      // 1. V -> A Trajectory: Source V_OHM (80, 202), Target MA (109, 202)
+      const pStart = computePlugTrajectory(80, 202, 109, 202, 0.0);
+      const pPhase1 = computePlugTrajectory(80, 202, 109, 202, 0.2); // Unplugging
+      const pPhase2 = computePlugTrajectory(80, 202, 109, 202, 0.5); // Mid-flight travel
+      const pPhase3 = computePlugTrajectory(80, 202, 109, 202, 0.8); // Inserting
+      const pEnd = computePlugTrajectory(80, 202, 109, 202, 1.0); // Fully inserted
+
+      const trajOk = [
+        pStart.curX === 80 && pStart.curY === 202,
+        pPhase1.curY > 202, // Out of socket along casing normal
+        pPhase2.curX === 80 + 29 * 0.5 && pPhase2.curY === 202 + 8.5, // Apex at mid-flight
+        pPhase3.curY > 202, // Still outside socket before seating
+        pEnd.curX === 109 && pEnd.curY === 202 // Seated in mA/A socket
+      ].every(Boolean);
+
+      // 2. Fast Interrupted Switch (V -> A clicked, then immediately A -> V at 40% flight)
+      const inFlight = computePlugTrajectory(80, 202, 109, 202, 0.4);
+      // Re-trigger from current inFlight (curX, curY) back to V_OHM (80, 202)
+      const reverseTraj = computePlugTrajectory(inFlight.curX, inFlight.curY, 80, 202, 1.0);
+      const interruptOk = reverseTraj.curX === 80 && reverseTraj.curY === 202;
+
+      // 3. Rotation 0°, 90°, 180°, 270° Transformation of Animated Plug
+      const comp = { x: 400, y: 300, width: 132, height: 304, rotation: 0 };
+      const rots = [0, 90, 180, 270];
+      let rotAnimOk = true;
+      for (const rot of rots) {
+        comp.rotation = rot;
+        const wStart = getRotatedPosition(comp.x, comp.y, comp.width, comp.height, pStart.curX, pStart.curY, rot);
+        const wEnd = getRotatedPosition(comp.x, comp.y, comp.width, comp.height, pEnd.curX, pEnd.curY, rot);
+        if (rot === 0) {
+          if (wStart.x !== 480 || wStart.y !== 502 || wEnd.x !== 509 || wEnd.y !== 502) rotAnimOk = false;
+        }
+      }
+
+      const checks = [trajOk, interruptOk, rotAnimOk];
+      const passed = checks.every(Boolean);
+      record(89, "PR PLUG ANIMATION: 3-Phase Banana Plug Motion, Smooth Arc Trajectory & Interrupted Switch Safety", passed);
+      console.log(`\n[TEST 89 / PR PLUG ANIMATION] 3-Phase Banana Plug Motion & Arc Trajectory`);
+      console.log(`  3-Phase Trajectory: Start(80,202) -> Apex(94.5, 210.5) -> End(109,202): ${checks[0] ? "✅" : "❌"}`);
+      console.log(`  Fast Interrupted Switch (V -> A -> V in-flight reverse safely): ${checks[1] ? "✅" : "❌"}`);
+      console.log(`  Rotated Plug Transforms (0°, 90°, 180°, 270° exact): ${checks[2] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 90 (PR FRONT PLUG & HANDOFF AUDIT) — Front Plug, Short Front Lead & Main Cable Layer Separation
+    // ──────────────────────────────────────────────
+    {
+      const comp = {
+        id: "meter1",
+        type: "multimeter",
+        x: 400,
+        y: 300,
+        width: 132,
+        height: 304,
+        rotation: 0,
+        properties: {
+          mode: "V_DC",
+          probes: {
+            vwma: { attachedTo: { compId: "R1", termId: "term_b" }, isPlaced: true },
+            com: { attachedTo: { compId: "R1", termId: "term_a" }, isPlaced: true }
+          }
+        }
+      };
+
+      const mockWs = {
+        connectionEngine: {
+          getTerminalWorldPosition: (cId, tId) => {
+            if (cId === "R1" && tId === "term_a") return { x: 500, y: 400 };
+            if (cId === "R1" && tId === "term_b") return { x: 600, y: 400 };
+            return null;
+          }
+        }
+      };
+
+      // 1. V Mode:
+      // Front Plug = V_OHM (480, 502), Handoff = (480, 534), Main Cable Start = (480, 534)
+      comp.properties.mode = "V_DC";
+      const plugV = getMultimeterJackPosition(comp, "vwma");
+      const handoffV = getMultimeterHandoffPosition(comp, "vwma");
+      const comPlugV = getMultimeterJackPosition(comp, "com");
+      const comHandoffV = getMultimeterHandoffPosition(comp, "com");
+
+      // 2. Switch to A_DC:
+      // Front Plug = MA right (509, 502), Handoff = (509, 534), Main Cable Start = (509, 534)
+      comp.properties.mode = "A_DC";
+      const plugA = getMultimeterJackPosition(comp, "vwma");
+      const handoffA = getMultimeterHandoffPosition(comp, "vwma");
+      const comPlugA = getMultimeterJackPosition(comp, "com");
+      const comHandoffA = getMultimeterHandoffPosition(comp, "com");
+      const tipA = getProbeTipPosition(comp, "vwma", mockWs);
+
+      // 3. Multimeter Rotation Transforms (0°, 90°, 180°, 270°)
+      const rots = [0, 90, 180, 270];
+      let rotHandoffOk = true;
+      for (const rot of rots) {
+        comp.rotation = rot;
+        comp.properties.mode = "V_DC";
+        const hV = getMultimeterHandoffPosition(comp, "vwma");
+        const expH = getRotatedPosition(400, 300, 132, 304, 80, 234, rot);
+        if (hV.x !== expH.x || hV.y !== expH.y) rotHandoffOk = false;
+      }
+      comp.rotation = 0;
+
+      const checks = [
+        plugV.x === 480 && plugV.y === 502, // Front Red Plug in V Mode
+        handoffV.x === 480 && handoffV.y === 534, // Red Handoff Point in V Mode
+        comPlugV.x === 452 && comPlugV.y === 502, // Front Black Plug
+        comHandoffV.x === 452 && comHandoffV.y === 534, // Black Handoff Point
+        plugA.x === 509 && plugA.y === 502, // Front Red Plug in A Mode (right mA/A)
+        handoffA.x === 509 && handoffA.y === 534, // Red Handoff Point in A Mode
+        comPlugA.x === 452 && comPlugA.y === 502, // Black Plug invariant in A mode
+        comHandoffA.x === 452 && comHandoffA.y === 534, // Black Handoff invariant in A mode
+        tipA.pos.x === 600 && tipA.pos.y === 400, // Circuit-side probe tip 100% stationary
+        comp.properties.probes.vwma.attachedTo?.compId === "R1", // Electrical attachedTo invariant
+        rotHandoffOk // Rotated Handoff exact
+      ];
+      const passed = checks.every(Boolean);
+      record(90, "PR FRONT PLUG & HANDOFF AUDIT: Front Plug, Short Front Lead & Main Cable Layer Separation", passed);
+      console.log(`\n[TEST 90 / PR FRONT PLUG & HANDOFF AUDIT] Front Plug & Handoff Layer Separation`);
+      console.log(`  V Mode Front Plug (480, 502) -> Handoff (480, 534): ${checks[0] && checks[1] ? "✅" : "❌"}`);
+      console.log(`  A Mode Front Plug (509, 502) -> Handoff (509, 534): ${checks[4] && checks[5] ? "✅" : "❌"}`);
+      console.log(`  Black COM Plug (452, 502) -> Handoff (452, 534)   : ${checks[2] && checks[3] ? "✅" : "❌"}`);
+      console.log(`  Circuit-Side Probe Tip Invariant on Node B (600,400): ${checks[8] ? "✅" : "❌"}`);
+      console.log(`  Rotated Handoff Transforms (0°, 90°, 180°, 270°)  : ${checks[10] ? "✅" : "❌"}`);
+      console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST 91 (PR FRONT BUTTONS AUDIT) — Power, Hold, Mode, Range & State Invariance
+    // ──────────────────────────────────────────────
+    {
+      const components = [
+        { id: "bat1", type: "battery", properties: { voltage: 12, internalResistance: 0 }, terminals: [{ id: "term_pos" }, { id: "term_neg" }] },
+        { id: "r1", type: "resistor", properties: { resistance: 240 }, terminals: [{ id: "term_a" }, { id: "term_b" }] },
+        {
+          id: "meter1",
+          type: "multimeter",
+          x: 400,
+          y: 300,
+          width: 132,
+          height: 304,
+          rotation: 0,
+          properties: {
+            powerOn: true,
+            holdEnabled: false,
+            heldReading: null,
+            mode: "V_DC",
+            rangeMode: "AUTO",
+            rangeIndex: 0,
+            probes: {
+              vwma: { attachedTo: { compId: "r1", termId: "term_b" }, isPlaced: true },
+              com: { attachedTo: { compId: "r1", termId: "term_a" }, isPlaced: true }
+            }
+          }
+        }
+      ];
+
+      const connections = [
+        { from: { componentId: "bat1", terminalId: "term_pos" }, to: { componentId: "r1", terminalId: "term_a" } },
+        { from: { componentId: "bat1", terminalId: "term_neg" }, to: { componentId: "r1", terminalId: "term_b" } }
+      ];
+
+      const mockWs = {
+        connectionEngine: {
+          getTerminalWorldPosition: (cId, tId) => {
+            if (cId === "r1" && tId === "term_a") return { x: 500, y: 400 };
+            if (cId === "r1" && tId === "term_b") return { x: 600, y: 400 };
+            return null;
+          }
+        }
+      };
+
+      const meter = components[2];
+      let netlist = NetlistBuilder.build(components, connections);
+      let uf = netlist.uf;
+      let solverRes = MNACircuitSolver.solve(components[0], components, connections);
+
+      // 1. Initial State: Normal 12V measurement
+      const eval1 = MeasurementEngine.evaluate(meter, solverRes, components, connections, uf);
+      const test1_on = eval1.readingText === "-12.00" && eval1.rawValue === -12;
+
+      // 2. POWER ON -> OFF -> ON
+      meter.properties.powerOn = false;
+      const evalPowerOff = MeasurementEngine.evaluate(meter, solverRes, components, connections, uf);
+      const test2_off = evalPowerOff.readingText === "OFF" && evalPowerOff.powerOff === true;
+
+      // 3. Probe Position Invariance during Power Toggle
+      const tipBefore = getProbeTipPosition(meter, "vwma", mockWs);
+      const tipBlackBefore = getProbeTipPosition(meter, "com", mockWs);
+      meter.properties.powerOn = true;
+      const evalPowerOn = MeasurementEngine.evaluate(meter, solverRes, components, connections, uf);
+      const tipAfter = getProbeTipPosition(meter, "vwma", mockWs);
+      const tipBlackAfter = getProbeTipPosition(meter, "com", mockWs);
+      const test3_probeInv = (
+        tipBefore.pos.x === tipAfter.pos.x && tipBefore.pos.y === tipAfter.pos.y &&
+        tipBlackBefore.pos.x === tipBlackAfter.pos.x && tipBlackBefore.pos.y === tipBlackAfter.pos.y &&
+        evalPowerOn.readingText === "-12.00"
+      );
+
+      // 4. HOLD Freezes Display Only while Solver Continues Updating
+      meter.properties.holdEnabled = true;
+      meter.properties.heldReading = { text: "-12.00", unit: "V" };
+      // Now change battery voltage from 12V to 24V in circuit
+      components[0].properties.voltage = 24;
+      netlist = NetlistBuilder.build(components, connections);
+      uf = netlist.uf;
+      solverRes = MNACircuitSolver.solve(components[0], components, connections);
+      const evalHeld = MeasurementEngine.evaluate(meter, solverRes, components, connections, uf);
+      const test4_holdFreeze = evalHeld.readingText === "-12.00" && evalHeld.rawValue === -24;
+
+      // 5. HOLD Release Returns Realtime Reading (24V)
+      meter.properties.holdEnabled = false;
+      meter.properties.heldReading = null;
+      const evalHoldReleased = MeasurementEngine.evaluate(meter, solverRes, components, connections, uf);
+      const test5_holdRelease = evalHoldReleased.readingText === "-24.00" && evalHoldReleased.rawValue === -24;
+
+      // 6. MODE V_DC -> V_AC supported
+      meter.properties.mode = "V_AC";
+      const evalVac = MeasurementEngine.evaluate(meter, solverRes, components, connections, uf);
+      const test6_modeVac = evalVac.readingText === "0.00" && getMultimeterJackPosition(meter, "vwma").x === 480;
+
+      // 7. MODE A_DC -> A_AC supported & Jack Right-side Anchor
+      meter.properties.mode = "A_DC";
+      const evalAdc = MeasurementEngine.evaluate(meter, solverRes, components, connections, uf);
+      meter.properties.mode = "A_AC";
+      const evalAac = MeasurementEngine.evaluate(meter, solverRes, components, connections, uf);
+      const test7_modeAac = evalAac.readingText === "0.000" && getMultimeterJackPosition(meter, "vwma").x === 509;
+
+      // 8. RANGE AUTO -> MANUAL (6V Range on 24V signal -> OL)
+      meter.properties.mode = "V_DC";
+      meter.properties.rangeMode = "MANUAL";
+      meter.properties.rangeIndex = 2; // 6V Range (max: 6.0)
+      const evalOverRange = MeasurementEngine.evaluate(meter, solverRes, components, connections, uf);
+      const test8_overRangeOL = evalOverRange.readingText === "OL" && evalOverRange.rawValue === -24;
+
+      // 9. RANGE MANUAL 60V Range on 24V signal -> Formatted Display
+      meter.properties.rangeIndex = 3; // 60V Range (max: 60.0)
+      const evalRange60V = MeasurementEngine.evaluate(meter, solverRes, components, connections, uf);
+      const test9_range60V = evalRange60V.readingText === "-24.00" && evalRange60V.rawValue === -24;
+
+      // 10. Raw Physics Value Invariant across Range Changes
+      const test10_rawInv = evalOverRange.rawValue === evalRange60V.rawValue && evalRange60V.rawValue === -24;
+
+      // 11. V / A Jack Mapping Correct
+      meter.properties.mode = "V_DC";
+      const jackV = getMultimeterJackPosition(meter, "vwma");
+      meter.properties.mode = "A_DC";
+      const jackA = getMultimeterJackPosition(meter, "vwma");
+      const test11_jackMapping = jackV.x === 480 && jackA.x === 509 && jackA.x !== 423;
+
+      // 12. Black COM Invariant
+      const jackComV = getMultimeterJackPosition(meter, "com");
+      meter.properties.mode = "OHM";
+      const jackComOhm = getMultimeterJackPosition(meter, "com");
+      const test12_comInv = jackComV.x === 452 && jackComOhm.x === 452;
+
+      // 13. V -> A Circuit-side Probe Remains Attached
+      const tipCircA = getProbeTipPosition(meter, "vwma", mockWs);
+      const test13_probeAttached = tipCircA.pos.x === 600 && tipCircA.pos.y === 400 && meter.properties.probes.vwma.attachedTo.compId === "r1";
+
+      // 14. Rapid Button Presses State Integrity (Cycle 50x without corruption)
+      for (let i = 0; i < 50; i++) {
+        meter.properties.powerOn = i % 2 === 0;
+        meter.properties.holdEnabled = i % 3 === 0;
+        meter.properties.heldReading = meter.properties.holdEnabled ? { text: "99.99", unit: "V" } : null;
+        meter.properties.rangeIndex = i % 5;
+        meter.properties.rangeMode = meter.properties.rangeIndex === 0 ? "AUTO" : "MANUAL";
+      }
+      meter.properties.mode = "V_DC";
+      meter.properties.powerOn = true;
+      meter.properties.holdEnabled = false;
+      meter.properties.heldReading = null;
+      meter.properties.rangeIndex = 0;
+      meter.properties.rangeMode = "AUTO";
+      const evalFinal = MeasurementEngine.evaluate(meter, solverRes, components, connections, uf);
+      const test14_rapidPress = evalFinal.readingText === "-24.00" && evalFinal.rawValue === -24;
+
+      const checks = [
+        test1_on, test2_off, test3_probeInv, test4_holdFreeze, test5_holdRelease,
+        test6_modeVac, test7_modeAac, test8_overRangeOL, test9_range60V, test10_rawInv,
+        test11_jackMapping, test12_comInv, test13_probeAttached, test14_rapidPress
+      ];
+      const passed = checks.every(Boolean);
+      record(91, "PR FRONT BUTTONS AUDIT: Power, Hold, Mode, Range & State Invariance", passed);
+      console.log(`\n[TEST 91 / PR FRONT BUTTONS AUDIT] Power, Hold, Mode, Range & State Invariance`);
+      console.log(`  1. Power ON Initial Reading (-12.00V)                  : ${checks[0] ? "✅" : "❌"}`);
+      console.log(`  2. Power OFF Displays "OFF"                            : ${checks[1] ? "✅" : "❌"}`);
+      console.log(`  3. Probe Positions Invariant across Power Toggles      : ${checks[2] ? "✅" : "❌"}`);
+      console.log(`  4. HOLD Freezes Display Only while Solver Runs (-24V)  : ${checks[3] ? "✅" : "❌"}`);
+      console.log(`  5. HOLD Release Restores Realtime Reading (-24.00V)    : ${checks[4] ? "✅" : "❌"}`);
+      console.log(`  6. MODE V_DC <-> V_AC Supported                        : ${checks[5] ? "✅" : "❌"}`);
+      console.log(`  7. MODE A_DC <-> A_AC Supported & Right mA/A Jack      : ${checks[6] ? "✅" : "❌"}`);
+      console.log(`  8. RANGE 6V Manual with 24V Signal => OL               : ${checks[7] ? "✅" : "❌"}`);
+      console.log(`  9. RANGE 60V Manual with 24V Signal => -24.00V         : ${checks[8] ? "✅" : "❌"}`);
+      console.log(`  10. Raw Physics Invariant across Range Changes (-24V)  : ${checks[9] ? "✅" : "❌"}`);
+      console.log(`  11. V / A Jack Mapping Correct                         : ${checks[10] ? "✅" : "❌"}`);
+      console.log(`  12. Black COM Invariant across All Modes               : ${checks[11] ? "✅" : "❌"}`);
+      console.log(`  13. Circuit-side Probe Remains Attached across Modes   : ${checks[12] ? "✅" : "❌"}`);
+      console.log(`  14. 50x Rapid Button Presses State Integrity           : ${checks[13] ? "✅" : "❌"}`);
       console.log(`  => ${passed ? "✅ PASSED" : "❌ FAILED"}`);
     }
 

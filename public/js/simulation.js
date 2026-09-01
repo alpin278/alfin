@@ -206,10 +206,24 @@ export class SimulationEngine {
     meters.forEach(m => {
       const measurement = MeasurementEngine.evaluate(m, circuitResult, components, connections, netlist.uf);
       m.properties.reading = measurement.readingText;
+      if (measurement.unit !== undefined) {
+        m.properties.unit = measurement.unit;
+      }
 
-      const valEl = document.getElementById(`meter-val-${m.id}`);
-      if (valEl) {
-        valEl.textContent = measurement.readingText;
+      const compEl = document.getElementById(`comp-${m.id}`);
+      if (compEl) {
+        if (window.componentEngine) {
+          window.componentEngine.updateComponentVisualProperties(compEl, m);
+        } else {
+          const valEl = document.getElementById(`meter-val-${m.id}`);
+          if (valEl) {
+            valEl.textContent = measurement.readingText;
+          }
+          const unitEl = document.getElementById(`meter-unit-${m.id}`);
+          if (unitEl) {
+            unitEl.textContent = m.properties.powerOn !== false ? (measurement.unit || "") : "";
+          }
+        }
       }
     });
   }

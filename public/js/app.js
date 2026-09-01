@@ -26,6 +26,7 @@ class DTEVirtualLabApp {
 
     this.componentEngine = new ComponentEngine(this.workspaceEngine);
     this.componentEngine.init();
+    window.componentEngine = this.componentEngine;
 
     this.connectionEngine = new ConnectionEngine(this.workspaceEngine);
     this.connectionEngine.init();
@@ -166,6 +167,54 @@ class DTEVirtualLabApp {
         this.openSaveCaseModal();
       });
     }
+
+    const btnRotateComponent = document.getElementById("btn-rotate-component");
+    if (btnRotateComponent) {
+      btnRotateComponent.addEventListener("click", () => {
+        const state = stateManager.getState();
+        if (state.selection?.type === "component" && state.selection?.id) {
+          stateManager.rotateComponent(state.selection.id, 90);
+        }
+      });
+    }
+
+    const btnDeleteComponent = document.getElementById("btn-delete-component");
+    if (btnDeleteComponent) {
+      btnDeleteComponent.addEventListener("click", () => {
+        const state = stateManager.getState();
+        if (state.selection?.type === "component" && state.selection?.id) {
+          stateManager.deleteComponent(state.selection.id);
+        } else if (state.selection?.type === "connection" && state.selection?.id) {
+          this.connectionEngine.deleteConnection(state.selection.id);
+        }
+      });
+    }
+
+    const updateActionButtons = (selection) => {
+      const isCompSelected = selection?.type === "component" && !!selection?.id;
+      const isConnSelected = selection?.type === "connection" && !!selection?.id;
+
+      if (btnRotateComponent) {
+        btnRotateComponent.disabled = !isCompSelected;
+      }
+      if (btnDeleteComponent) {
+        btnDeleteComponent.disabled = !(isCompSelected || isConnSelected);
+      }
+      const toolDelete = document.getElementById("tool-delete");
+      if (toolDelete) {
+        toolDelete.disabled = !(isCompSelected || isConnSelected);
+      }
+    };
+
+    stateManager.subscribe("selection", (selection) => {
+      updateActionButtons(selection);
+    });
+
+    stateManager.subscribe("components", () => {
+      updateActionButtons(stateManager.getState().selection);
+    });
+
+    updateActionButtons(stateManager.getState().selection);
 
     const btnScreenshot = document.getElementById("btn-screenshot");
     if (btnScreenshot) {

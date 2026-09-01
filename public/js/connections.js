@@ -48,6 +48,7 @@ export class ConnectionEngine {
     this.bindTerminalEvents();
     this.bindCanvasWiringEvents();
     this.bindKeyboardEvents();
+    this.bindCancelButtonEvents();
 
     stateManager.subscribe("connections", () => this.renderWires());
     stateManager.subscribe("components", () => this.renderWires());
@@ -56,6 +57,41 @@ export class ConnectionEngine {
       this.updateSelectionVisuals();
       this.renderFloatingToolbar();
     });
+  }
+
+  bindCancelButtonEvents() {
+    const btnCancel = document.getElementById("btn-cancel-wire");
+    if (btnCancel) {
+      btnCancel.addEventListener("click", (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        this.cancelActiveConnection();
+      });
+    }
+  }
+
+  updateCancelButtonUI(isConnecting) {
+    const btnCancel = document.getElementById("btn-cancel-wire");
+    const btnRotate = document.getElementById("btn-rotate-component");
+    const btnDelete = document.getElementById("btn-delete-component");
+
+    if (btnCancel) {
+      if (isConnecting) {
+        btnCancel.style.display = "inline-flex";
+        btnCancel.classList.add("active");
+        if (btnRotate) btnRotate.style.display = "none";
+        if (btnDelete) btnDelete.style.display = "none";
+      } else {
+        btnCancel.style.display = "none";
+        btnCancel.classList.remove("active");
+        if (btnRotate) btnRotate.style.display = "";
+        if (btnDelete) btnDelete.style.display = "";
+      }
+    }
+  }
+
+  cancelActiveConnection() {
+    this.cancelConnecting();
   }
 
   createSnapIndicator() {
@@ -76,33 +112,30 @@ export class ConnectionEngine {
     const compLayer = document.getElementById("components-layer");
     if (!compLayer) return;
 
-    const onTerminalTouchStart = (e) => {
+    compLayer.addEventListener("pointerdown", (e) => {
       const termEl = e.target.closest(".terminal-node");
       if (!termEl) return;
 
-      e.stopPropagation();
-      if (e.cancelable) e.preventDefault();
-      const compId = termEl.getAttribute("data-comp-id");
-      const termId = termEl.getAttribute("data-term-id");
-
-      this.handleTerminalClick(compId, termId, termEl, e);
-    };
-
-    const onPointerDown = (e) => {
-      if (e.pointerType === "touch") return; // Handled by touchstart
-      const termEl = e.target.closest(".terminal-node");
-      if (!termEl) return;
+      // Never start wiring if workspace is currently in multi-touch PINCH_ZOOM mode
+      if (this.workspace?.gestureState === "PINCH_ZOOM" || (this.workspace?.activePointers?.size || 0) >= 2) {
+        return;
+      }
 
       e.stopPropagation();
       if (e.cancelable) e.preventDefault();
+
       const compId = termEl.getAttribute("data-comp-id");
       const termId = termEl.getAttribute("data-term-id");
 
-      this.handleTerminalClick(compId, termId, termEl, e);
-    };
+      this.activeTerminalPointerId = e.pointerId;
+      this.activeTerminalEl = termEl;
 
-    compLayer.addEventListener("touchstart", onTerminalTouchStart, { passive: false });
-    compLayer.addEventListener("pointerdown", onPointerDown, { passive: false });
+      try {
+        termEl.setPointerCapture(e.pointerId);
+      } catch (err) {}
+
+      this.handleTerminalClick(compId, termId, termEl, e);
+    }, { passive: false });
   }
 
   bindCanvasWiringEvents() {
@@ -110,19 +143,24 @@ export class ConnectionEngine {
       if (!this.isConnecting || !this.sourceTerminal) return;
       if (e.cancelable) e.preventDefault();
 
-      const clientX = e.clientX ?? (e.touches && e.touches[0] ? e.touches[0].clientX : (e.changedTouches && e.changedTouches[0] ? e.changedTouches[0].clientX : 0));
-      const clientY = e.clientY ?? (e.touches && e.touches[0] ? e.touches[0].clientY : (e.changedTouches && e.changedTouches[0] ? e.changedTouches[0].clientY : 0));
-
       if (this.isDraggingWire && this.dragStartCoords) {
-        if (Math.hypot(clientX - this.dragStartCoords.x, clientY - this.dragStartCoords.y) > 8) {
+        if (Math.hypot(e.clientX - this.dragStartCoords.x, e.clientY - this.dragStartCoords.y) > 4) {
           this.dragHasMoved = true;
         }
       }
 
-      const rawPos = this.workspace.screenToCanvas(clientX, clientY);
+      const rawPos = this.workspace.screenToCanvas(e.clientX, e.clientY);
       
-      // 1. Check Magnetic Snapping to any Component Terminal (radius 36px for touch accessibility)
-      const termSnap = this.findNearestTerminalSnap(rawPos.x, rawPos.y, 36);
+      // Screen-space magnetic tolerances with hysteresis
+      const zoom = this.workspace?.zoom || 1;
+      const isTouch = (e.pointerType === "touch");
+      const enterRadius = isTouch ? 20 : 12;
+      const releaseRadius = isTouch ? 28 : 18;
+      const screenSnapTol = this.hoveredTerminal ? releaseRadius : enterRadius;
+      const worldSnapTol = screenSnapTol / zoom;
+
+      // 1. Check Magnetic Snapping to any Component Terminal
+      const termSnap = this.findNearestTerminalSnap(rawPos.x, rawPos.y, worldSnapTol, this.hoveredTerminal);
       
       // Remove previous terminal hover highlights
       document.querySelectorAll(".terminal-node.snap-hover").forEach(el => el.classList.remove("snap-hover"));
@@ -141,8 +179,9 @@ export class ConnectionEngine {
       } else {
         this.hoveredTerminal = null;
 
-        // 2. Check Snapping to an existing Wire Branch (radius 24px)
-        const wireSnap = this.findNearestWireSnap(rawPos.x, rawPos.y, 24);
+        // 2. Check Snapping to an existing Wire Branch
+        const wireSnapTol = (isTouch ? 22 : 16) / zoom;
+        const wireSnap = this.findNearestWireSnap(rawPos.x, rawPos.y, wireSnapTol);
         if (wireSnap) {
           this.snapTarget = wireSnap;
           this.currentMousePos = wireSnap.point;
@@ -166,16 +205,18 @@ export class ConnectionEngine {
     const onPointerUp = (e) => {
       if (!this.isConnecting || !this.sourceTerminal) return;
 
-      const clientX = e.clientX ?? (e.changedTouches && e.changedTouches[0] ? e.changedTouches[0].clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0));
-      const clientY = e.clientY ?? (e.changedTouches && e.changedTouches[0] ? e.changedTouches[0].clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0));
-      const rawPos = this.workspace.screenToCanvas(clientX, clientY);
+      if (this.activeTerminalEl && this.activeTerminalPointerId !== null) {
+        try { this.activeTerminalEl.releasePointerCapture(this.activeTerminalPointerId); } catch (err) {}
+      }
+      this.activeTerminalPointerId = null;
+      this.activeTerminalEl = null;
 
       // If user performed a continuous drag-and-drop gesture to a terminal or wire branch:
       if (this.isDraggingWire && this.dragHasMoved) {
         this.isDraggingWire = false;
 
-        // Check if released on a hovered terminal or near a terminal
-        const termSnap = this.hoveredTerminal || this.findNearestTerminalSnap(rawPos.x, rawPos.y, 40);
+        // ONLY commit to terminal if hoveredTerminal is active (terminal was highlighted)
+        const termSnap = this.hoveredTerminal;
         if (termSnap) {
           if (e.cancelable) e.preventDefault();
           if (this.isReconnectingEndpoint && this.reconnectingConn) {
@@ -214,25 +255,31 @@ export class ConnectionEngine {
           return;
         }
 
-        // If reconnecting and dropped in open air -> rollback to original terminal!
-        if (this.isReconnectingEndpoint) {
-          this.cancelConnecting();
-          stateManager.notify("connections");
-          return;
-        }
+        // Dropped in open space during drag-and-drop -> clean rollback / cancel (no ghost wire!)
+        this.cancelConnecting();
+        stateManager.notify("connections");
+        return;
       }
 
       this.isDraggingWire = false;
     };
 
+    const onPointerCancel = (e) => {
+      if (this.activeTerminalEl && this.activeTerminalPointerId !== null) {
+        try { this.activeTerminalEl.releasePointerCapture(this.activeTerminalPointerId); } catch (err) {}
+      }
+      this.activeTerminalPointerId = null;
+      this.activeTerminalEl = null;
+
+      if (this.isConnecting) {
+        this.cancelConnecting();
+        stateManager.notify("connections");
+      }
+    };
+
     window.addEventListener("pointermove", onPointerMove, { passive: false });
     window.addEventListener("pointerup", onPointerUp);
-    window.addEventListener("mousemove", onPointerMove, { passive: false });
-    window.addEventListener("mouseup", onPointerUp);
-    window.addEventListener("touchmove", onPointerMove, { passive: false });
-    window.addEventListener("touchend", onPointerUp);
-    document.addEventListener("pointermove", onPointerMove, { passive: false });
-    document.addEventListener("mousemove", onPointerMove, { passive: false });
+    window.addEventListener("pointercancel", onPointerCancel);
 
     const container = this.workspace.container;
     if (container) {
@@ -245,7 +292,7 @@ export class ConnectionEngine {
         this.cutWireAtPoint(rawPos.x, rawPos.y);
       });
 
-      // Helper method for canvas tap action during wire connection
+      // Helper method for canvas tap action during wire connection (click-to-connect mode)
       const handleCanvasTapAction = (e, clientX, clientY) => {
         if (!this.isConnecting) return;
 
@@ -267,7 +314,7 @@ export class ConnectionEngine {
         this.lastTapTime = now;
         this.lastTapPos = { x: clientX, y: clientY };
 
-        // 1. If snapped to a valid terminal -> FINISH CONNECTION INSTANTLY!
+        // 1. If snapped to a valid terminal (highlight is active) -> FINISH CONNECTION!
         if (this.hoveredTerminal) {
           e.stopPropagation();
           const target = this.hoveredTerminal;
@@ -291,62 +338,31 @@ export class ConnectionEngine {
           return;
         }
 
-        // 3. Also check direct snap at click position (within 40px for easy touch)
-        const rawPos = this.workspace.screenToCanvas(clientX, clientY);
-        const nearSnap = this.findNearestTerminalSnap(rawPos.x, rawPos.y, 40);
-        if (nearSnap) {
-          e.stopPropagation();
-          this.createConnection(
-            this.sourceTerminal.isHanging ? this.sourceTerminal : { componentId: this.sourceTerminal.componentId, terminalId: this.sourceTerminal.terminalId },
-            { componentId: nearSnap.compId, terminalId: nearSnap.termId },
-            [...this.waypoints]
-          );
-          this.cancelConnecting();
-          return;
-        }
-
-        // 4. If snapped to an existing wire -> FINISH CLEAN BRANCH!
+        // 3. If snapped to an existing wire -> FINISH CLEAN BRANCH!
         if (this.snapTarget) {
           e.stopPropagation();
           this.finishJunctionConnection(this.snapTarget.conn, this.snapTarget.point);
           return;
         }
 
-        // 5. Tap / Left Click on empty canvas -> add 90° corner waypoint
+        // 4. Tap / Left Click on empty canvas -> add manual waypoint (snapped to grid)
+        const rawPos = this.workspace.screenToCanvas(clientX, clientY);
         this.addWaypoint(rawPos.x, rawPos.y);
       };
 
-      // Touchstart on container to completely prevent iOS Safari double-tap zoom during wire drawing
-      container.addEventListener("touchstart", (e) => {
-        if (!this.isConnecting) return;
-
-        if (e.target.closest(".terminal-node") || e.target.closest(".smart-number-badge") || e.target.closest(".hanging-wire-node") || e.target.closest(".probe-assembly")) {
-          return;
-        }
-
-        if (e.cancelable) e.preventDefault();
-
-        const touch = e.touches[0] || (e.changedTouches ? e.changedTouches[0] : null);
-        if (!touch) return;
-
-        handleCanvasTapAction(e, touch.clientX, touch.clientY);
-      }, { passive: false });
-
-      // Pointerdown on container for desktop mouse interactions
       container.addEventListener("pointerdown", (e) => {
         if (!this.isConnecting) return;
-        if (e.pointerType === "touch") return; // Handled by touchstart
 
         if (e.target.closest(".terminal-node") || e.target.closest(".smart-number-badge") || e.target.closest(".hanging-wire-node") || e.target.closest(".probe-assembly")) {
           return;
         }
 
         if (e.button === 2) {
-          this.cancelConnecting();
+          this.cancelActiveConnection();
           return;
         }
 
-        if (e.button === 0) {
+        if (e.button === 0 || e.pointerType === "touch" || e.pointerType === "pen") {
           handleCanvasTapAction(e, e.clientX, e.clientY);
         }
       }, { passive: false });
@@ -354,14 +370,14 @@ export class ConnectionEngine {
 
     window.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && this.isConnecting) {
-        this.cancelConnecting();
+        this.cancelActiveConnection();
       }
     });
 
     window.addEventListener("contextmenu", (e) => {
       if (this.isConnecting) {
         e.preventDefault();
-        this.cancelConnecting();
+        this.cancelActiveConnection();
       }
     });
   }
@@ -383,11 +399,6 @@ export class ConnectionEngine {
     const state = stateManager.getState();
 
     if (!this.isConnecting) {
-      // Cooldown guard: Cegah ghost click/pointerdown ganda memulai kabel baru seketika setelah kabel difinalisasi
-      if (Date.now() - this.lastConnectionFinishTime < 300) {
-        return;
-      }
-
       // Check if there is an existing connection attached to this terminal (endpoint lifting / re-dragging)
       const existingConn = state.connections.find(
         c => (!c.to?.isHanging && !c.to?.isWireBranch && c.to?.componentId === compId && c.to?.terminalId === termId) ||
@@ -436,6 +447,7 @@ export class ConnectionEngine {
           this.currentMousePos = { x: termPos.x, y: termPos.y };
           this.drawWirePreview();
         }
+        this.updateCancelButtonUI(true);
         return;
       }
 
@@ -466,6 +478,7 @@ export class ConnectionEngine {
         this.currentMousePos = { x: termPos.x, y: termPos.y };
         this.drawWirePreview();
       }
+      this.updateCancelButtonUI(true);
     } else {
       if (this.isReconnectingEndpoint && this.reconnectingConn) {
         if (compId === this.sourceTerminal.componentId && termId === this.sourceTerminal.terminalId) {
@@ -511,11 +524,6 @@ export class ConnectionEngine {
 
   handleHangingNodeClick(conn, point, nodeEl, e) {
     if (!this.isConnecting) {
-      // Cooldown guard: Cegah ghost click/pointerdown ganda
-      if (Date.now() - this.lastConnectionFinishTime < 350) {
-        return;
-      }
-
       this.isConnecting = true;
       this.isDraggingWire = true;
       this.dragHasMoved = false;
@@ -540,6 +548,7 @@ export class ConnectionEngine {
         this.currentMousePos = { x: point.x, y: point.y };
         this.drawWirePreview();
       }
+      this.updateCancelButtonUI(true);
     } else {
       this.cutWireAtPoint(point.x, point.y);
     }
@@ -597,8 +606,25 @@ export class ConnectionEngine {
     this.cancelConnecting();
   }
 
-  findNearestTerminalSnap(mouseX, mouseY, tolerance = 32) {
+  findNearestTerminalSnap(mouseX, mouseY, tolerance = 16, currentHoverTarget = null) {
     const state = stateManager.getState();
+
+    // Hysteresis check: if already hovering a terminal, check if pointer is still within release radius
+    if (currentHoverTarget) {
+      const pos = this.getTerminalWorldPosition(currentHoverTarget.compId, currentHoverTarget.termId);
+      if (pos) {
+        const dist = Math.hypot(mouseX - pos.x, mouseY - pos.y);
+        if (dist <= tolerance) {
+          return {
+            compId: currentHoverTarget.compId,
+            termId: currentHoverTarget.termId,
+            pos: pos,
+            el: currentHoverTarget.el || document.getElementById(`term-${currentHoverTarget.compId}-${currentHoverTarget.termId}`)
+          };
+        }
+      }
+    }
+
     let bestSnap = null;
     let minDistance = tolerance;
 
@@ -613,7 +639,7 @@ export class ConnectionEngine {
         if (!pos) return;
 
         const dist = Math.hypot(mouseX - pos.x, mouseY - pos.y);
-        if (dist < minDistance) {
+        if (dist <= minDistance) {
           minDistance = dist;
           const el = document.getElementById(`term-${comp.id}-${term.id}`);
           bestSnap = {
@@ -670,7 +696,6 @@ export class ConnectionEngine {
 
     let t = ((p.x - a.x) * abx + (p.y - a.y) * aby) / lengthSq;
     t = Math.max(0, Math.min(1, t));
-
     const px = a.x === b.x ? a.x : (a.x + t * abx);
     const py = a.y === b.y ? a.y : (a.y + t * aby);
 
@@ -678,75 +703,146 @@ export class ConnectionEngine {
   }
 
   /**
+   * Normalizes an orthogonal route:
+   * 1. Removes consecutive duplicate points (within tolerance)
+   * 2. Collapses 3+ collinear points ONLY if the middle point is not a manual waypoint
+   * 3. Snaps nearly-straight 2-point routes to strictly identical coordinates
+   */
+  normalizeOrthogonalRoute(points, tolerance = 2) {
+    if (!points || points.length <= 1) return points || [];
+
+    // Step 1: Remove consecutive duplicates
+    let result = [points[0]];
+    for (let i = 1; i < points.length; i++) {
+      const prev = result[result.length - 1];
+      const curr = points[i];
+      if (Math.abs(curr.x - prev.x) > tolerance || Math.abs(curr.y - prev.y) > tolerance) {
+        result.push(curr);
+      }
+    }
+
+    if (result.length <= 2) {
+      if (result.length === 2) {
+        if (Math.abs(result[0].y - result[1].y) <= tolerance) {
+          result[1].y = result[0].y;
+        }
+        if (Math.abs(result[0].x - result[1].x) <= tolerance) {
+          result[1].x = result[0].x;
+        }
+      }
+      return result;
+    }
+
+    // Step 2: Iteratively collapse collinear triplets ONLY if the middle point is NOT a manual waypoint
+    let changed = true;
+    while (changed && result.length >= 3) {
+      changed = false;
+      const simplified = [result[0]];
+
+      for (let i = 1; i < result.length - 1; i++) {
+        const pPrev = simplified[simplified.length - 1];
+        const pCurr = result[i];
+        const pNext = result[i + 1];
+
+        // Never collapse a user-created manual waypoint
+        if (pCurr.isManual) {
+          simplified.push(pCurr);
+          continue;
+        }
+
+        // Horizontal collinearity: pPrev.y == pCurr.y == pNext.y
+        const isHorizontalCollinear =
+          Math.abs(pPrev.y - pCurr.y) <= tolerance &&
+          Math.abs(pCurr.y - pNext.y) <= tolerance;
+
+        // Vertical collinearity: pPrev.x == pCurr.x == pNext.x
+        const isVerticalCollinear =
+          Math.abs(pPrev.x - pCurr.x) <= tolerance &&
+          Math.abs(pCurr.x - pNext.x) <= tolerance;
+
+        if (isHorizontalCollinear || isVerticalCollinear) {
+          changed = true;
+        } else {
+          simplified.push(pCurr);
+        }
+      }
+
+      simplified.push(result[result.length - 1]);
+      result = simplified;
+    }
+
+    // Final alignment on 2 remaining endpoints if collapsed to single segment
+    if (result.length === 2) {
+      if (Math.abs(result[0].y - result[1].y) <= tolerance) {
+        result[1].y = result[0].y;
+      }
+      if (Math.abs(result[0].x - result[1].x) <= tolerance) {
+        result[1].x = result[0].x;
+      }
+    }
+
+    return result;
+  }
+
+  /**
    * Smart CAD Schematic Manhattan Routing
-   * Produces clean horizontal/vertical orthogonal paths with zero diagonal or backward lines
+   * 1. Direct connection (0 manual waypoints): Straight-first Proteus Manhattan routing (auto-bends vanish when aligned)
+   * 2. Manual waypoints present: Segment-by-segment routing preserving all user waypoints
    */
   getPolylinePoints(p1, p2, waypoints) {
     if (!p1 || !p2) return [];
 
-    const points = [p1];
+    const tolerance = 2;
+    const pt1 = { x: Math.round(p1.x), y: Math.round(p1.y) };
+    const pt2 = { x: Math.round(p2.x), y: Math.round(p2.y) };
 
-    if (waypoints && waypoints.length > 0) {
-      // Add all fixed waypoints with orthogonal elbows if needed
-      for (let i = 0; i < waypoints.length; i++) {
-        const prev = points[points.length - 1];
-        const wp = waypoints[i];
-        
-        if (Math.abs(prev.x - wp.x) > 2 && Math.abs(prev.y - wp.y) > 2) {
-          points.push({ x: wp.x, y: prev.y });
-        }
-        points.push(wp);
-      }
+    if (!waypoints || waypoints.length === 0) {
+      // Direct connection between p1 and p2 (0 manual waypoints)
+      const dx = Math.abs(pt2.x - pt1.x);
+      const dy = Math.abs(pt2.y - pt1.y);
 
-      // From last waypoint to p2 (target terminal or live cursor preview):
-      const lastWp = points[points.length - 1];
-      if (Math.abs(lastWp.x - p2.x) > 2 || Math.abs(lastWp.y - p2.y) > 2) {
-        const dx = p2.x - lastWp.x;
-        const dy = p2.y - lastWp.y;
-        if (Math.abs(dx) >= Math.abs(dy)) {
-          points.push({ x: p2.x, y: lastWp.y });
-        } else {
-          points.push({ x: lastWp.x, y: p2.y });
-        }
-        points.push(p2);
-      }
-    } else {
-      // No waypoints: direct Manhattan routing from p1 to p2
-      const dx = p2.x - p1.x;
-      const dy = p2.y - p1.y;
-
-      // 1. Direct Straight Alignment
-      if (Math.abs(dy) <= 2) {
-        points.push(p2);
-        return points;
-      }
-      if (Math.abs(dx) <= 2) {
-        points.push(p2);
-        return points;
+      // Case 1: Same Y -> ONE straight horizontal segment
+      if (dy <= tolerance) {
+        return [{ x: pt1.x, y: pt1.y }, { x: pt2.x, y: pt1.y }];
       }
 
-      // 2. Symmetrical Manhattan Routing (no backward loops)
-      if (Math.abs(dx) >= Math.abs(dy)) {
-        if (Math.abs(dx) > 20) {
-          const midX = Math.round((p1.x + p2.x) / 2);
-          points.push({ x: midX, y: p1.y });
-          points.push({ x: midX, y: p2.y });
-        } else {
-          points.push({ x: p2.x, y: p1.y });
-        }
-      } else {
-        if (Math.abs(dy) > 20) {
-          const midY = Math.round((p1.y + p2.y) / 2);
-          points.push({ x: p1.x, y: midY });
-          points.push({ x: p2.x, y: midY });
-        } else {
-          points.push({ x: p1.x, y: p2.y });
-        }
+      // Case 2: Same X -> ONE straight vertical segment
+      if (dx <= tolerance) {
+        return [{ x: pt1.x, y: pt1.y }, { x: pt1.x, y: pt2.y }];
       }
-      points.push(p2);
+
+      // Case 3: Diagonal -> ONE deterministic horizontal-first L-bend
+      return [
+        { x: pt1.x, y: pt1.y },
+        { x: pt2.x, y: pt1.y, isAuto: true },
+        { x: pt2.x, y: pt2.y }
+      ];
     }
 
-    return points;
+    // Manual waypoints present: route segment-by-segment
+    const keypoints = [
+      pt1,
+      ...waypoints.map(wp => ({ x: Math.round(wp.x), y: Math.round(wp.y), isManual: true })),
+      pt2
+    ];
+
+    const poly = [keypoints[0]];
+
+    for (let i = 0; i < keypoints.length - 1; i++) {
+      const from = poly[poly.length - 1];
+      const to = keypoints[i + 1];
+
+      const dx = Math.abs(to.x - from.x);
+      const dy = Math.abs(to.y - from.y);
+
+      if (dx > tolerance && dy > tolerance) {
+        // Insert auto orthogonal bend for this segment (horizontal-first)
+        poly.push({ x: to.x, y: from.y, isAuto: true });
+      }
+      poly.push(to);
+    }
+
+    return this.normalizeOrthogonalRoute(poly, tolerance);
   }
 
   addWaypoint(x, y) {
@@ -756,24 +852,19 @@ export class ConnectionEngine {
       ? this.waypoints[this.waypoints.length - 1] 
       : { x: this.sourceTerminal.worldX, y: this.sourceTerminal.worldY };
 
-    const dx = Math.abs(x - lastPoint.x);
-    const dy = Math.abs(y - lastPoint.y);
+    // Snap to workspace grid
+    const gridSize = this.workspace?.gridSize || 20;
+    const wpX = Math.round(x / gridSize) * gridSize;
+    const wpY = Math.round(y / gridSize) * gridSize;
 
-    // Prevent duplicate waypoint
-    if (dx < 4 && dy < 4) return;
+    const dist = Math.hypot(wpX - lastPoint.x, wpY - lastPoint.y);
 
-    let wpX = Math.round(x);
-    let wpY = Math.round(y);
+    // Prevent duplicate waypoint at exact same grid point
+    if (dist < 4) return;
 
-    if (dx > dy) {
-      wpY = lastPoint.y;
-    } else {
-      wpX = lastPoint.x;
-    }
-
-    this.waypoints.push({ x: wpX, y: wpY });
+    this.waypoints.push({ x: wpX, y: wpY, isManual: true });
     
-    // Update currentMousePos immediately to the new waypoint so no trailing stray loop is drawn
+    // Update currentMousePos immediately to the new waypoint
     this.currentMousePos = { x: wpX, y: wpY };
     this.drawWirePreview();
   }
@@ -789,6 +880,12 @@ export class ConnectionEngine {
     this.snapTarget = null;
     this.hoveredTerminal = null;
     this.lastConnectionFinishTime = Date.now();
+
+    if (this.activeTerminalEl && this.activeTerminalPointerId !== null) {
+      try { this.activeTerminalEl.releasePointerCapture(this.activeTerminalPointerId); } catch (err) {}
+    }
+    this.activeTerminalPointerId = null;
+    this.activeTerminalEl = null;
 
     if (this.isReconnectingEndpoint && this.reconnectingConn) {
       const origPath = document.getElementById(`wire-${this.reconnectingConn.id}`);
@@ -814,6 +911,8 @@ export class ConnectionEngine {
       this.wirePreview.style.display = "none";
       this.wirePreview.setAttribute("d", "");
     }
+
+    this.updateCancelButtonUI(false);
   }
 
   createConnection(from, to, waypoints = []) {
@@ -974,11 +1073,8 @@ export class ConnectionEngine {
     const p1 = { x: this.sourceTerminal.worldX, y: this.sourceTerminal.worldY };
     const p2 = this.currentMousePos;
 
-    if (this.waypoints.length === 0) {
-      this.wirePreview.setAttribute("d", `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y}`);
-    } else {
-      this.wirePreview.setAttribute("d", this.computeOrthogonalPath(p1, p2, this.waypoints));
-    }
+    // Always use orthogonal (Manhattan) routing — no diagonal preview
+    this.wirePreview.setAttribute("d", this.computeOrthogonalPath(p1, p2, this.waypoints));
     this.wirePreview.style.display = "block";
   }
 
@@ -1263,12 +1359,12 @@ export class ConnectionEngine {
       </button>
     `;
 
-    tb.querySelector("#btn-cut-wire-at-point").addEventListener("click", (e) => {
+    tb.querySelector("#btn-cut-wire-at-point")?.addEventListener("click", (e) => {
       e.stopPropagation();
       this.splitWireAtPoint(conn, anchor.x, anchor.y);
     });
 
-    tb.querySelector("#btn-delete-wire-action").addEventListener("click", (e) => {
+    tb.querySelector("#btn-delete-wire-action")?.addEventListener("click", (e) => {
       e.stopPropagation();
       this.deleteConnection(conn.id);
     });

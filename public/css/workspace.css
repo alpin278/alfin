@@ -63,6 +63,18 @@
   z-index: var(--z-workspace-components);
 }
 
+/* SVG Front Cables & Plugs Layer (Above Component Body) */
+.cables-front-svg-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 10000px;
+  height: 10000px;
+  pointer-events: none;
+  z-index: var(--z-workspace-front-cables);
+  overflow: visible;
+}
+
 /* --------------------------------------------------------------------------
    Proteus-Style Orthogonal 90° Cables (Flush CAD T-Junctions)
    -------------------------------------------------------------------------- */

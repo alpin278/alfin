@@ -71,6 +71,7 @@
 
   /* Hide secondary desktop-only controls from mobile top header */
   .zoom-stepper,
+  .header-tool-divider,
   #btn-screenshot,
   #btn-help,
   #btn-create-report,

@@ -157,50 +157,6 @@
   outline-offset: 4px;
 }
 
-/* Component Floating Toolbar (Rotate 90°, Delete) */
-.component-floating-toolbar {
-  position: absolute;
-  transform: translate(-50%, -100%);
-  background-color: rgba(15, 23, 42, 0.94);
-  backdrop-filter: blur(8px);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  padding: 3px 6px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
-  z-index: 40;
-  pointer-events: auto;
-  animation: fadeIn 0.15s ease;
-}
-
-.btn-comp-action {
-  background-color: #1e293b;
-  border: 1px solid #334155;
-  border-radius: var(--radius-sm);
-  color: #f8fafc;
-  font-size: 0.72rem;
-  font-weight: 700;
-  padding: 4px 8px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  transition: all 0.15s ease;
-}
-
-.btn-comp-action:hover {
-  background-color: var(--color-primary-blue);
-  border-color: var(--color-primary-blue);
-  color: #ffffff;
-}
-
-.btn-comp-action.danger:hover {
-  background-color: var(--color-error-red);
-  border-color: var(--color-error-red);
-}
-
 /* --------------------------------------------------------------------------
    A. REALISTIC RESISTOR
    -------------------------------------------------------------------------- */
@@ -584,10 +540,10 @@
   padding: 0 !important;
 }
 
-/* Main Vertical Handheld Casing with Yellow Holster Bumper Trim (Enlarged 12% Taller) */
+/* Main Vertical Handheld Casing with Yellow Holster Bumper Trim (Taller 234px Proportions) */
 .meter-casing-vertical {
   width: 100%;
-  height: 194px;
+  height: 234px;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -665,41 +621,83 @@
   box-sizing: border-box;
 }
 
+/* TOP STATUS ROW: 4 Fixed Geometric Slots (Zero Shift when switching AUTO <-> MANUAL or HOLD) */
+.meter-lcd-top-bar.multimeter-lcd-status,
 .meter-lcd-top-bar {
-  display: flex;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1.35fr 0.7fr 0.8fr 0.75fr;
   align-items: center;
-  justify-content: space-between;
   font-family: var(--font-mono), monospace;
   font-size: 6.8px;
   font-weight: 800;
   color: #1e293b;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
   line-height: 1.2;
   min-height: 11px;
-}
-
-.lcd-badge-auto, .lcd-badge-rms {
-  padding: 0 1px;
-}
-
-.lcd-badge-mode {
+  box-sizing: border-box;
   padding: 0 2px;
-  font-size: 8px;
+  overflow: hidden;
+}
+
+.status-range,
+.lcd-badge-auto {
+  justify-self: start;
+  text-align: left;
+  font-size: 6.8px;
+  font-weight: 800;
+  color: #1e293b;
+  white-space: nowrap;
+  padding: 0;
+}
+
+.status-mode,
+.lcd-badge-mode {
+  justify-self: center;
+  text-align: center;
+  font-size: 7.5px;
   font-weight: 900;
   color: #020617;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  white-space: nowrap;
+  padding: 0;
 }
 
+.status-hold,
+.lcd-badge-hold {
+  justify-self: center;
+  text-align: center;
+  font-size: 7px;
+  font-weight: 900;
+  color: #b45309;
+  white-space: nowrap;
+  padding: 0;
+  visibility: hidden; /* Fixed slot layout: does not shift neighbors when hidden */
+}
+
+.status-rms,
+.lcd-badge-rms {
+  justify-self: end;
+  text-align: right;
+  font-size: 6.8px;
+  font-weight: 800;
+  color: #334155;
+  white-space: nowrap;
+  padding: 0;
+}
+
+/* MAIN READING ROW */
+.meter-lcd-main-light.reading-row,
 .meter-lcd-main-light {
+  width: 100%;
   display: flex;
   align-items: baseline;
-  justify-content: flex-end;
-  gap: 3px;
+  justify-content: center;
+  gap: 5px;
   font-family: 'JetBrains Mono', 'Courier New', var(--font-mono), monospace;
   color: #020617;
-  margin: 1px 0;
+  margin: 0;
+  padding: 0;
+  line-height: 1;
 }
 
 .meter-comp-val {
@@ -708,14 +706,19 @@
   letter-spacing: -0.02em;
   line-height: 1;
   color: #020617;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .meter-comp-unit {
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 800;
   color: #0f172a;
+  min-width: 12px;
+  text-align: left;
 }
 
+/* BOTTOM ANALOG BAR GRAPH */
 .meter-lcd-bar-graph {
   width: 100%;
   display: flex;
@@ -771,7 +774,27 @@
   align-items: center;
   justify-content: center;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-  cursor: default;
+  cursor: pointer;
+  pointer-events: auto;
+  user-select: none;
+  transition: all 0.15s ease;
+}
+
+.meter-power-btn:hover {
+  background: linear-gradient(180deg, #f87171 0%, #dc2626 100%);
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+}
+
+.meter-power-btn:active {
+  transform: scale(0.92);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+.meter-power-btn.off {
+  background: linear-gradient(180deg, #475569 0%, #1e293b 100%);
+  border-color: #0f172a;
+  color: #94a3b8;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
 .meter-chip-btn {
@@ -784,13 +807,64 @@
   border-radius: 2.5px;
   padding: 1.5px 4px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  pointer-events: auto;
+  user-select: none;
+  transition: all 0.15s ease;
 }
 
-/* Center Rotary Selector Dial Section with Radial Markings */
+.meter-chip-btn:hover {
+  background: #475569;
+  color: #ffffff;
+}
+
+.meter-chip-btn:active {
+  transform: scale(0.92);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.meter-chip-btn.active {
+  background: #f59e0b;
+  color: #020617;
+  border-color: #d97706;
+  font-weight: 900;
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.6);
+}
+
+/* Power Off State Dimming */
+.comp-multimeter.power-off .meter-lcd-screen-light,
+.workspace-component.power-off .meter-lcd-screen-light,
+.multimeter-visual.power-off .meter-lcd-screen-light {
+  background: #9ca3af !important;
+  opacity: 0.65;
+  filter: grayscale(0.8);
+}
+
+.comp-multimeter.power-off .multimeter-lcd-status,
+.workspace-component.power-off .multimeter-lcd-status,
+.multimeter-visual.power-off .multimeter-lcd-status {
+  opacity: 0.25;
+}
+
+.comp-multimeter.power-off .meter-comp-val,
+.workspace-component.power-off .meter-comp-val,
+.multimeter-visual.power-off .meter-comp-val {
+  color: #475569 !important;
+  font-size: 15px;
+  text-align: center;
+}
+
+.comp-multimeter.power-off .meter-comp-unit,
+.workspace-component.power-off .meter-comp-unit,
+.multimeter-visual.power-off .meter-comp-unit {
+  display: none;
+}
+
+/* Center Rotary Selector Dial Section with Calibrated Radial Markings (84px Height) */
 .meter-dial-section {
   position: relative;
   width: 100%;
-  height: 52px;
+  height: 84px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -800,62 +874,66 @@
 .meter-dial-label {
   position: absolute;
   font-family: 'Space Grotesk', var(--font-heading), sans-serif;
-  font-size: 7.5px;
-  font-weight: 800;
+  font-size: 8px;
+  font-weight: 700;
   color: #94a3b8;
-  transition: all 0.2s ease;
-  pointer-events: none;
-}
-
-.meter-dial-label.label-v {
-  top: 2px;
-  left: 14px;
-}
-
-.meter-dial-label.label-vac {
-  top: 15px;
-  left: 4px;
+  opacity: 0.65;
+  transition: color 120ms ease, opacity 120ms ease;
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
+  width: 14px;
+  height: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 
 .meter-dial-label.label-ohm {
-  top: -2px;
+  top: 6px;
   left: 50%;
   transform: translateX(-50%);
 }
 
-.meter-dial-label.label-cont {
-  top: 15px;
-  right: 4px;
+.meter-dial-label.label-v {
+  top: 18px;
+  left: 14px;
+}
+
+.meter-dial-label.label-vac {
+  top: 42px;
+  left: 6px;
 }
 
 .meter-dial-label.label-a {
-  top: 2px;
+  top: 18px;
   right: 14px;
 }
 
 .meter-dial-label.label-aac {
-  bottom: 2px;
-  right: 8px;
-  font-size: 6px;
+  top: 42px;
+  right: 6px;
 }
 
 .meter-dial-label.active {
   color: #fbbf24;
   font-weight: 900;
-  text-shadow: 
-    0 0 6px rgba(251, 191, 36, 0.95),
-    0 1px 2px rgba(0, 0, 0, 0.9);
-  transform: scale(1.3);
+  opacity: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 }
 
 .meter-dial-label.label-ohm.active {
-  transform: translateX(-50%) scale(1.3);
+  transform: translateX(-50%);
 }
 
-/* Circular Rotary Knob with 3D Bar Handle & Pointer */
+/* Circular Rotary Knob with 3D Bar Handle & Calibrated Pointer */
 .meter-rotary-knob {
-  width: 38px;
-  height: 38px;
+  position: absolute;
+  top: 30px;
+  left: 40px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   background: radial-gradient(circle, #1e293b 0%, #0f172a 100%);
   border: 2px solid #334155;
@@ -868,7 +946,8 @@
     inset 0 -2px 4px rgba(0, 0, 0, 0.7);
   cursor: pointer;
   pointer-events: auto;
-  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transform-origin: 50% 50%;
+  transition: transform 160ms ease;
 }
 
 .knob-face {
@@ -879,10 +958,10 @@
 }
 
 .knob-bar-handle {
-  width: 10px;
-  height: 30px;
+  width: 9px;
+  height: 28px;
   background: linear-gradient(90deg, #334155 0%, #1e293b 50%, #0f172a 100%);
-  border-radius: 3px;
+  border-radius: 2.5px;
   border: 1px solid #475569;
   position: absolute;
   top: 50%;
@@ -895,7 +974,7 @@
 
 .knob-pointer-arrow {
   width: 3.5px;
-  height: 7px;
+  height: 8px;
   background: #fbbf24;
   border-radius: 1px;
   position: absolute;
@@ -903,73 +982,100 @@
   box-shadow: 0 0 4px #fbbf24;
 }
 
-/* 4-Port Banana Jack Input Panel with Yellow Accent Collars */
+/* 4-Port Banana Jack Input Panel with Fixed 4-Column Grid */
+.meter-jacks-panel.jack-row,
 .meter-jacks-panel {
   width: 100%;
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  padding: 0 4px 2px 4px;
+  display: grid;
+  grid-template-columns: repeat(4, 29px);
+  justify-content: center;
+  align-items: start;
+  padding: 0 8px 4px 8px;
   box-sizing: border-box;
 }
 
+.multimeter-jack,
+.meter-jack-housing,
 .meter-banana-jack {
+  width: 29px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1.5px;
+  justify-content: flex-start;
+  position: relative;
+  text-align: center;
+  box-sizing: border-box;
 }
 
-.jack-socket-rim {
-  width: 18px;
-  height: 18px;
+.jack-socket-rim,
+.jack-hole {
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1.8px solid #f59e0b;
+  border: 1.6px solid #f59e0b;
   background: #020617;
   box-shadow: 
-    0 2px 4px rgba(0, 0, 0, 0.5),
+    0 1.5px 3px rgba(0, 0, 0, 0.5),
     inset 0 1px 1px rgba(255, 255, 255, 0.2);
+  margin-bottom: 2px;
+  box-sizing: border-box;
 }
 
-.jack-com .jack-socket-rim {
+.jack-com .jack-socket-rim,
+.jack-com .jack-hole {
   border-color: #f59e0b;
 }
 
-.jack-vwma .jack-socket-rim {
+.jack-vwma .jack-socket-rim,
+.jack-v-ohm-ma .jack-socket-rim,
+.jack-vwma .jack-hole {
   border-color: #ef4444;
 }
 
 .jack-10a .jack-socket-rim,
-.jack-temp .jack-socket-rim {
+.jack-10a .jack-hole,
+.jack-ma .jack-socket-rim,
+.jack-ma .jack-hole {
   border-color: #f59e0b;
 }
 
+.jack-metal-core,
 .jack-socket-hole {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: #000000;
   border: 1px solid #334155;
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.95);
+  box-sizing: border-box;
 }
 
+.jack-label,
 .jack-name {
+  display: block;
   font-family: var(--font-mono), monospace;
-  font-size: 5.8px;
+  font-size: 5.5px;
   font-weight: 800;
   line-height: 1;
-  color: #f1f5f9;
+  color: #cbd5e1;
+  white-space: nowrap;
+  letter-spacing: -0.02em;
+  text-align: center;
+  margin-top: 1px;
 }
 
+.jack-com .jack-label,
 .jack-com .jack-name {
   color: #f59e0b;
 }
 
+.jack-vwma .jack-label,
+.jack-v-ohm-ma .jack-label,
 .jack-vwma .jack-name {
-  color: #f87171;
+  color: #fca5a5;
 }
 
 /* Visual Probe Test Leads (Extension Wires & Needles) */
@@ -1349,11 +1455,26 @@
 }
 
 .diode-lead {
-  width: 18px;
+  position: absolute;
+  top: 50%;
   height: 2.5px;
   background: linear-gradient(180deg, #e2e8f0 0%, #94a3b8 50%, #64748b 100%);
+  transform: translateY(-50%);
   border-radius: 1px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  z-index: 1;
+}
+
+.diode-lead-left,
+.diode-lead-anode {
+  left: 0;
+  width: 19px;
+}
+
+.diode-lead-right,
+.diode-lead-cathode {
+  right: 0;
+  width: 19px;
 }
 
 .diode-body {
@@ -1367,6 +1488,7 @@
   align-items: center;
   justify-content: center;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35), inset 0 1px 2px rgba(255, 255, 255, 0.3);
+  z-index: 2;
 }
 
 .diode-cathode-band {
@@ -1400,6 +1522,20 @@
   letter-spacing: -0.05em;
 }
 
+.diode-label {
+  position: absolute;
+  bottom: -18px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: #1e293b;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 0.5px 5px;
+  border-radius: 3px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
 .diode-bias-badge {
   position: absolute;
   top: -14px;
@@ -1426,24 +1562,28 @@
   background-color: #64748b;
 }
 
-.diode-bias-badge.state-forward_bias {
+.diode-bias-badge.state-forward_bias,
+.diode-bias-badge.bias-forward {
   background: #022c22;
   border-color: #10b981;
   color: #34d399;
 }
 
-.diode-bias-badge.state-forward_bias .bias-indicator-dot {
+.diode-bias-badge.state-forward_bias .bias-indicator-dot,
+.diode-bias-badge.bias-forward .bias-indicator-dot {
   background-color: #10b981;
   box-shadow: 0 0 6px #10b981;
 }
 
-.diode-bias-badge.state-reverse_bias {
+.diode-bias-badge.state-reverse_bias,
+.diode-bias-badge.bias-reverse {
   background: #450a0a;
   border-color: #ef4444;
   color: #f87171;
 }
 
-.diode-bias-badge.state-reverse_bias .bias-indicator-dot {
+.diode-bias-badge.state-reverse_bias .bias-indicator-dot,
+.diode-bias-badge.bias-reverse .bias-indicator-dot {
   background-color: #ef4444;
   box-shadow: 0 0 6px #ef4444;
 }

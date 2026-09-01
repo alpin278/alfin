@@ -19,9 +19,18 @@ export class WorkspaceEngine {
     this.maxZoom = 3.0;
     this.gridSize = 20;
 
-    this.isPanning = false;
+    // Explicit Gesture State Machine ("IDLE" | "PAN" | "PINCH_ZOOM")
+    this.gestureState = "IDLE";
+    this.activePointers = new Map(); // pointerId -> { x, y }
     this.startX = 0;
     this.startY = 0;
+
+    // Pinch Zoom Geometry Tracking
+    this.pinchStartDistance = 0;
+    this.pinchStartMidpoint = { x: 0, y: 0 };
+    this.pinchStartZoom = 1.0;
+    this.pinchStartPan = { x: 0, y: 0 };
+    this.pinchWorldMidpoint = { x: 0, y: 0 };
   }
 
   init() {
@@ -46,43 +55,110 @@ export class WorkspaceEngine {
   bindEvents() {
     if (!this.container) return;
 
-    // Pan on background drag
+    // PointerDown on workspace background
     this.container.addEventListener("pointerdown", (e) => {
       if (this.connectionEngine?.isConnecting) return;
 
-      if (
+      // Only handle background surface touches
+      const isBg = (
         e.target === this.container ||
         e.target === this.canvas ||
         e.target.id === "grid-layer" ||
-        e.target.id === "svg-cable-layer"
-      ) {
-        this.isPanning = true;
+        e.target.id === "svg-cable-layer" ||
+        e.target.classList?.contains("workspace-wrapper")
+      );
+
+      if (!isBg) return;
+
+      this.activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      if (this.activePointers.size === 1) {
+        this.gestureState = "PAN";
         this.startX = e.clientX - this.panX;
         this.startY = e.clientY - this.panY;
         try { this.container.setPointerCapture(e.pointerId); } catch (err) {}
-        
         stateManager.setSelection(null, null);
+      } else if (this.activePointers.size >= 2) {
+        // Switch to PINCH_ZOOM
+        this.gestureState = "PINCH_ZOOM";
+        const pointers = Array.from(this.activePointers.values());
+        const p1 = pointers[0];
+        const p2 = pointers[1];
+        
+        this.pinchStartDistance = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+        const midScreenX = (p1.x + p2.x) / 2;
+        const midScreenY = (p1.y + p2.y) / 2;
+        
+        const rect = this.container.getBoundingClientRect();
+        const localMidX = midScreenX - rect.left;
+        const localMidY = midScreenY - rect.top;
+        
+        this.pinchStartMidpoint = { x: localMidX, y: localMidY };
+        this.pinchStartZoom = this.zoom;
+        this.pinchStartPan = { x: this.panX, y: this.panY };
+        this.pinchWorldMidpoint = {
+          x: (localMidX - this.pinchStartPan.x) / this.pinchStartZoom,
+          y: (localMidY - this.pinchStartPan.y) / this.pinchStartZoom
+        };
       }
     });
 
     window.addEventListener("pointermove", (e) => {
-      if (this.isPanning) {
+      if (this.activePointers.has(e.pointerId)) {
+        this.activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      }
+
+      if (this.gestureState === "PINCH_ZOOM" && this.activePointers.size >= 2) {
+        if (e.cancelable) e.preventDefault();
+
+        const pointers = Array.from(this.activePointers.values());
+        const p1 = pointers[0];
+        const p2 = pointers[1];
+
+        const currentDistance = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+        const scale = currentDistance / (this.pinchStartDistance || 1);
+        const targetZoom = Math.min(Math.max(this.pinchStartZoom * scale, this.minZoom), this.maxZoom);
+
+        const midScreenX = (p1.x + p2.x) / 2;
+        const midScreenY = (p1.y + p2.y) / 2;
+        const rect = this.container.getBoundingClientRect();
+        const localMidX = midScreenX - rect.left;
+        const localMidY = midScreenY - rect.top;
+
+        // Invariant: keep world point at midpoint stationary under the fingers
+        this.panX = Math.round(localMidX - this.pinchWorldMidpoint.x * targetZoom);
+        this.panY = Math.round(localMidY - this.pinchWorldMidpoint.y * targetZoom);
+        this.zoom = targetZoom;
+
+        this.renderTransform();
+        stateManager.setWorkspaceTransform(this.panX, this.panY, this.zoom);
+      } else if (this.gestureState === "PAN" && this.activePointers.size === 1) {
         this.panX = e.clientX - this.startX;
         this.panY = e.clientY - this.startY;
         this.renderTransform();
       }
-    });
+    }, { passive: false });
 
-    const onPanEnd = (e) => {
-      if (this.isPanning) {
-        this.isPanning = false;
-        try { this.container.releasePointerCapture(e.pointerId); } catch (err) {}
-        stateManager.setWorkspaceTransform(this.panX, this.panY, this.zoom);
+    const onPointerEnd = (e) => {
+      this.activePointers.delete(e.pointerId);
+      try { this.container.releasePointerCapture(e.pointerId); } catch (err) {}
+
+      if (this.activePointers.size === 1) {
+        // Transition remaining touch to PAN smoothly
+        this.gestureState = "PAN";
+        const remaining = Array.from(this.activePointers.values())[0];
+        this.startX = remaining.x - this.panX;
+        this.startY = remaining.y - this.panY;
+      } else if (this.activePointers.size === 0) {
+        if (this.gestureState !== "IDLE") {
+          this.gestureState = "IDLE";
+          stateManager.setWorkspaceTransform(this.panX, this.panY, this.zoom);
+        }
       }
     };
 
-    window.addEventListener("pointerup", onPanEnd);
-    window.addEventListener("pointercancel", onPanEnd);
+    window.addEventListener("pointerup", onPointerEnd);
+    window.addEventListener("pointercancel", onPointerEnd);
 
     // Zoom on wheel relative to cursor point
     this.container.addEventListener("wheel", (e) => {
@@ -170,9 +246,31 @@ export class WorkspaceEngine {
     };
   }
 
+  screenToCanvasRaw(clientX, clientY) {
+    const rect = this.container.getBoundingClientRect();
+    const screenX = clientX - rect.left;
+    const screenY = clientY - rect.top;
+
+    return {
+      x: (screenX - this.panX) / this.zoom,
+      y: (screenY - this.panY) / this.zoom
+    };
+  }
+
   snap(val) {
     const state = stateManager.getState();
     if (!state.workspace.snapToGrid) return Math.round(val);
     return Math.round(val / this.gridSize) * this.gridSize;
   }
+}
+
+/**
+ * Standalone grid snap utility — single source of truth.
+ * Snaps a world-coordinate value to the nearest grid multiple.
+ * @param {number} value - World coordinate value
+ * @param {number} gridSize - Grid spacing (default 20)
+ * @returns {number} Snapped value
+ */
+export function snapToGrid(value, gridSize = 20) {
+  return Math.round(value / gridSize) * gridSize;
 }

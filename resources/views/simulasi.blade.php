@@ -118,6 +118,31 @@
           <button class="btn-step" id="btn-zoom-plus" title="Perbesar">+</button>
         </div>
 
+        <div class="header-tool-divider" style="width: 1px; height: 18px; background: rgba(51, 65, 85, 0.6); margin: 0 1px;"></div>
+
+        <!-- Putar Komponen 90° (Rotate) -->
+        <button class="btn-tool-icon" id="btn-rotate-component" title="Putar komponen 90° (Shortcut: R)" disabled>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
+          </svg>
+        </button>
+
+        <!-- Hapus Komponen / Objek (Delete) -->
+        <button class="btn-tool-icon danger" id="btn-delete-component" title="Hapus komponen (Shortcut: Del / Backspace)" disabled>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+        </button>
+
+        <!-- Batalkan Sambungan Kabel (Mobile & Desktop Cancel Wire Action / ESC Equivalent) -->
+        <button class="btn-tool-icon danger" id="btn-cancel-wire" title="Batalkan sambungan (Shortcut: Esc)" aria-label="Batalkan sambungan" style="display: none;">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+
         <!-- Screenshot Rangkaian -->
         <button class="btn-tool-icon" id="btn-screenshot" title="Ambil Gambar Rangkaian">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -320,6 +345,9 @@
 
             <!-- Components Layer -->
             <div class="components-layer" id="components-layer"></div>
+
+            <!-- SVG Front Cables & Plugs Layer (Rendered In Front of Components) -->
+            <svg class="cables-front-svg-layer" id="svg-front-cable-layer"></svg>
           </div>
         </div>
 

@@ -20,6 +20,18 @@ export class MeasurementEngine {
   static evaluate(meterComp, circuitResult, components, connections, uf) {
     const mode = meterComp.properties?.mode || "V_DC";
 
+    // 0. POWER CHECK: If meter is turned OFF, display OFF and do not measure
+    if (meterComp.properties?.powerOn === false) {
+      return {
+        readingText: "OFF",
+        rawValue: 0,
+        unit: "",
+        isWarning: false,
+        warningMessage: null,
+        powerOff: true
+      };
+    }
+
     // 1. Identify effective terminal connection for Red Probe (VΩmA)
     let termVwma = `${meterComp.id}:term_vwma`;
     let isVwmaAttached = false;
@@ -43,65 +55,118 @@ export class MeasurementEngine {
     const hasValidVwma = isVwmaAttached || isVwmaWired;
     const hasValidCom = isComAttached || isComWired;
 
+    // Helper to extract held display when HOLD is active
+    const getHeld = () => {
+      if (!meterComp.properties?.holdEnabled) return null;
+      const h = meterComp.properties?.heldDisplay || meterComp.properties?.heldReading;
+      if (!h) return null;
+      if (typeof h === "string") return { text: h, unit: "" };
+      return { text: h.text, unit: h.unit || "" };
+    };
+
+    const held = getHeld();
+
     // Default unprobed state
     if (!hasValidVwma || !hasValidCom) {
+      if (held) {
+        return {
+          readingText: held.text,
+          rawValue: 0,
+          unit: held.unit || (mode.startsWith("A") ? "A" : (mode === "OHM" ? "Ω" : "V")),
+          isWarning: false,
+          warningMessage: null
+        };
+      }
       if (mode === "OHM" || mode === "DIODE" || mode === "CONT") {
         return { readingText: "O.L", rawValue: Infinity, unit: "Ω", isWarning: false, warningMessage: "Probes Open" };
       }
-      return { readingText: "0.00", rawValue: 0, unit: mode === "A_DC" ? "A" : "V", isWarning: false, warningMessage: "Probes Floating" };
+      return { readingText: "0.00", rawValue: 0, unit: mode.startsWith("A") ? "A" : "V", isWarning: false, warningMessage: "Probes Floating" };
     }
 
     const netVwma = uf.find(termVwma);
     const netCom = uf.find(termCom);
 
-    // --- MODE 1: DC VOLTAGE (V_DC) ---
-    if (mode === "V_DC") {
-      if (netVwma === netCom) {
-        return { readingText: "0.00", rawValue: 0, unit: "V", isWarning: false, warningMessage: "Same Node" };
+    // --- MODE 1: VOLTAGE (V_DC / V_AC) ---
+    if (mode === "V_DC" || mode === "V_AC") {
+      let vDiff = 0;
+      if (netVwma !== netCom) {
+        const nodeVoltages = circuitResult?.nodeVoltages || new Map();
+        const vRed = nodeVoltages.get(netVwma) ?? 0;
+        const vBlack = nodeVoltages.get(netCom) ?? 0;
+        vDiff = vRed - vBlack;
       }
 
-      const nodeVoltages = circuitResult?.nodeVoltages || new Map();
-      const vRed = nodeVoltages.get(netVwma) ?? 0;
-      const vBlack = nodeVoltages.get(netCom) ?? 0;
-
-      // Signed potential difference: V_measured = V_red - V_black
-      const vDiff = vRed - vBlack;
       const rawValue = vDiff;
-      const formatted = (Math.abs(vDiff) < 1e-4) ? "0.00" : vDiff.toFixed(2);
+      let formatted = (Math.abs(vDiff) < 1e-4) ? "0.00" : vDiff.toFixed(2);
+      let unit = "V";
+
+      if (mode === "V_AC") {
+        // True RMS of pure DC in AC coupled mode is 0.00 VAC
+        formatted = "0.00";
+      }
+
+      // Range check
+      const rangeIndex = meterComp.properties?.rangeIndex || 0;
+      const rangeMode = meterComp.properties?.rangeMode || "AUTO";
+      if (rangeMode === "MANUAL" && rangeIndex > 0) {
+        const ranges = [
+          { label: "AUTO", max: Infinity },
+          { label: "600mV", max: 0.6, decimals: 3, unit: "mV", scale: 1000 },
+          { label: "6V", max: 6.0, decimals: 3 },
+          { label: "60V", max: 60.0, decimals: 2 },
+          { label: "600V", max: 600.0, decimals: 1 }
+        ];
+        const range = ranges[rangeIndex] || ranges[0];
+        if (Math.abs(rawValue) > range.max) {
+          formatted = "OL";
+        } else {
+          const scaledVal = range.scale ? rawValue * range.scale : rawValue;
+          formatted = (Math.abs(scaledVal) < 1e-5) ? (0).toFixed(range.decimals) : scaledVal.toFixed(range.decimals);
+          if (range.unit) unit = range.unit;
+        }
+      }
+
+      // HOLD override (freezes LCD display text only, rawValue stays realtime)
+      if (held) {
+        formatted = held.text;
+        if (held.unit) unit = held.unit;
+      }
 
       return {
         readingText: formatted,
         rawValue,
-        unit: "V",
+        unit,
         polarity: vDiff >= 0 ? "+" : "-",
         isWarning: false,
         warningMessage: null
       };
     }
 
-    // --- MODE 2: DC CURRENT (A_DC) ---
-    if (mode === "A_DC") {
-      if (netVwma === netCom) {
-        return { readingText: "0.00", rawValue: 0, currentMagnitude: 0, unit: "A", polarity: "+", isWarning: false, warningMessage: "Shunted Probes" };
-      }
-
+    // --- MODE 2: CURRENT (A_DC / A_AC) ---
+    if (mode === "A_DC" || mode === "A_AC") {
       let currentVal = 0;
-      if (circuitResult?.ammeterCurrents && circuitResult.ammeterCurrents.has(meterComp.id)) {
-        currentVal = circuitResult.ammeterCurrents.get(meterComp.id) || 0;
-      } else if (circuitResult?.totalCurrent !== undefined && circuitResult.totalCurrent !== null) {
-        currentVal = circuitResult.totalCurrent;
+      if (netVwma !== netCom) {
+        if (circuitResult?.ammeterCurrents && circuitResult.ammeterCurrents.has(meterComp.id)) {
+          currentVal = circuitResult.ammeterCurrents.get(meterComp.id) || 0;
+        } else if (circuitResult?.totalCurrent !== undefined && circuitResult.totalCurrent !== null) {
+          currentVal = circuitResult.totalCurrent;
+        }
       }
 
+      const rawValue = currentVal;
       const currentMag = Math.abs(currentVal);
       const isShortCircuit = circuitResult?.shortCircuit === true;
       const isOvercurrent = currentMag > 10.0 || isShortCircuit;
 
       let formatted = "0.00";
+      let unit = "A";
       let warningMsg = null;
 
       if (isShortCircuit || currentMag > 10.0) {
         formatted = "OVERLOAD";
         warningMsg = "⚠️ Short Circuit Risk — Ammeter connected in parallel! Ammeter must be connected in series with load.";
+      } else if (mode === "A_AC") {
+        formatted = "0.000";
       } else if (currentMag < 1e-4) {
         formatted = "0.000";
       } else if (currentMag >= 1.0) {
@@ -110,12 +175,38 @@ export class MeasurementEngine {
         formatted = currentVal.toFixed(3);
       }
 
+      // Range check
+      const rangeIndex = meterComp.properties?.rangeIndex || 0;
+      const rangeMode = meterComp.properties?.rangeMode || "AUTO";
+      if (rangeMode === "MANUAL" && rangeIndex > 0) {
+        const ranges = [
+          { label: "AUTO", max: Infinity },
+          { label: "60mA", max: 0.06, decimals: 2, unit: "mA", scale: 1000 },
+          { label: "600mA", max: 0.6, decimals: 1, unit: "mA", scale: 1000 },
+          { label: "10A", max: 10.0, decimals: 3 }
+        ];
+        const range = ranges[rangeIndex] || ranges[0];
+        if (currentMag > range.max) {
+          formatted = "OL";
+        } else {
+          const scaledVal = range.scale ? currentVal * range.scale : currentVal;
+          formatted = (Math.abs(scaledVal) < 1e-5) ? (0).toFixed(range.decimals) : scaledVal.toFixed(range.decimals);
+          if (range.unit) unit = range.unit;
+        }
+      }
+
+      // HOLD override
+      if (held) {
+        formatted = held.text;
+        if (held.unit) unit = held.unit;
+      }
+
       return {
         readingText: formatted,
-        rawValue: currentVal,
+        rawValue,
         currentMagnitude: currentMag,
         polarity: currentVal >= 0 ? "+" : "-",
-        unit: "A",
+        unit,
         isWarning: isOvercurrent,
         warningMessage: warningMsg
       };
@@ -151,29 +242,57 @@ export class MeasurementEngine {
 
       let formatted = "0.00";
       let unit = "Ω";
-      if (req < 0.05) {
-        formatted = "0.00";
-      } else if (req < 1000) {
-        formatted = req % 1 === 0 ? req.toFixed(1) : req.toFixed(2);
-        if (formatted.endsWith(".00")) formatted = req.toFixed(1);
-      } else if (req < 1e6) {
-        formatted = (req / 1000).toFixed(2);
-        unit = "kΩ";
+
+      const rangeIndex = meterComp.properties?.rangeIndex || 0;
+      const rangeMode = meterComp.properties?.rangeMode || "AUTO";
+      if (rangeMode === "MANUAL" && rangeIndex > 0) {
+        const ranges = [
+          { label: "AUTO", max: Infinity },
+          { label: "600Ω", max: 600, decimals: 1 },
+          { label: "6kΩ", max: 6000, decimals: 3, unit: "kΩ", scale: 0.001 },
+          { label: "60kΩ", max: 60000, decimals: 2, unit: "kΩ", scale: 0.001 },
+          { label: "600kΩ", max: 600000, decimals: 1, unit: "kΩ", scale: 0.001 },
+          { label: "6MΩ", max: 6000000, decimals: 3, unit: "MΩ", scale: 0.000001 }
+        ];
+        const range = ranges[rangeIndex] || ranges[0];
+        if (req > range.max) {
+          formatted = "OL";
+        } else {
+          const scaledVal = range.scale ? req * range.scale : req;
+          formatted = scaledVal.toFixed(range.decimals || 1);
+          if (range.unit) unit = range.unit;
+        }
       } else {
-        formatted = (req / 1e6).toFixed(2);
-        unit = "MΩ";
+        if (req < 0.05) {
+          formatted = "0.00";
+        } else if (req < 1000) {
+          formatted = req % 1 === 0 ? req.toFixed(1) : req.toFixed(2);
+          if (formatted.endsWith(".00")) formatted = req.toFixed(1);
+        } else if (req < 1e6) {
+          formatted = (req / 1000).toFixed(2);
+          unit = "kΩ";
+        } else {
+          formatted = (req / 1e6).toFixed(2);
+          unit = "MΩ";
+        }
       }
 
-      return { readingText: `${formatted} ${unit === "Ω" ? "" : unit}`, rawValue: req, unit, isWarning: false, warningMessage: null };
+      // HOLD override
+      if (held) {
+        formatted = held.text;
+        if (held.unit) unit = held.unit;
+      }
+
+      return { readingText: formatted.trim(), rawValue: req, unit, isWarning: false, warningMessage: null };
     }
 
     // --- MODE 4: CONTINUITY (CONT) ---
     if (mode === "CONT") {
       const req = MNACircuitSolver.calculateEquivalentResistance(termVwma, termCom, components, connections);
-      const isContinuous = isFinite(req) && req < 50; // Threshold 50 ohms
+      const isContinuous = isFinite(req) && req < 50;
 
       return {
-        readingText: isContinuous ? `${req.toFixed(1)} Ω` : "O.L",
+        readingText: isContinuous ? req.toFixed(1) : "O.L",
         rawValue: req,
         unit: "Ω",
         isContinuous,
@@ -186,7 +305,7 @@ export class MeasurementEngine {
     if (mode === "DIODE") {
       const req = MNACircuitSolver.calculateEquivalentResistance(termVwma, termCom, components, connections);
       if (req < 100) {
-        return { readingText: "0.68 V", rawValue: 0.68, unit: "V", isWarning: false, warningMessage: "Diode Forward Bias" };
+        return { readingText: "0.68", rawValue: 0.68, unit: "V", isWarning: false, warningMessage: "Diode Forward Bias" };
       }
       return { readingText: "O.L", rawValue: Infinity, unit: "V", isWarning: false, warningMessage: "Diode Reverse Bias / Open" };
     }
