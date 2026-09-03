@@ -7,6 +7,7 @@ import { stateManager } from "./state.js";
 export class SmartNumberingEngine {
   constructor() {
     this.layer = document.getElementById("components-layer");
+    this.showNodeIds = false; // Default: false (Node numbers hidden in normal user mode)
   }
 
   init() {
@@ -15,8 +16,17 @@ export class SmartNumberingEngine {
     stateManager.subscribe("components_moving", () => {});
   }
 
+  toggleNodeIds(show = null) {
+    this.showNodeIds = show !== null ? Boolean(show) : !this.showNodeIds;
+    this.calculateAndRender();
+    return this.showNodeIds;
+  }
+
   calculateAndRender() {
     document.querySelectorAll(".smart-number-badge").forEach(b => b.remove());
+
+    // Do not render floating node ID numbers in normal user mode
+    if (!this.showNodeIds) return;
 
     const state = stateManager.getState();
     if (!state.connections.length) return;

@@ -66,6 +66,67 @@ export function getRotatedPosition(originX, originY, width, height, relX, relY, 
 }
 
 /**
+ * Single Source of Truth for Terminal / Pin World Positions:
+ * Direct mathematical calculation from component top-left placement, dimensions, terminal relative offsets, and rotation.
+ * Invariant: Wire endpoints, DOM terminal markers, hitboxes, and leads all share this exact coordinate.
+ */
+export function getTerminalWorldPosition(compId, termId) {
+  const state = stateManager.getState();
+  const comp = state.components?.find(c => c.id === compId);
+  if (!comp) return null;
+
+  const term = comp.terminals?.find(t => t.id === termId);
+  if (!term) return null;
+
+  return getRotatedPosition(comp.x, comp.y, comp.width, comp.height, term.relX, term.relY, comp.rotation || 0);
+}
+
+/**
+ * Terminal-First Grid Snapping:
+ * Aligns the primary electrical terminal to the exact workspace grid dots,
+ * ensuring all terminals land on the grid across all 4 rotations (0°, 90°, 180°, 270°).
+ */
+export function snapComponentToGrid(rawCompX, rawCompY, comp, gridSize = 20) {
+  if (!comp || !comp.terminals || comp.terminals.length === 0 || comp.type === "multimeter") {
+    return {
+      x: Math.round(rawCompX / gridSize) * gridSize,
+      y: Math.round(rawCompY / gridSize) * gridSize
+    };
+  }
+
+  const t0 = comp.terminals[0];
+  const width = comp.width;
+  const height = comp.height;
+  const rotation = comp.rotation || 0;
+
+  const cx = width / 2;
+  const cy = height / 2;
+  const dx = t0.relX - cx;
+  const dy = t0.relY - cy;
+
+  const rad = (rotation * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+
+  const rotX0 = dx * cos - dy * sin;
+  const rotY0 = dx * sin + dy * cos;
+
+  // 1. Calculate raw world position of reference terminal 0
+  const rawTerm0X = rawCompX + cx + rotX0;
+  const rawTerm0Y = rawCompY + cy + rotY0;
+
+  // 2. Snap reference terminal 0 to exact grid dot
+  const snappedTerm0X = Math.round(rawTerm0X / gridSize) * gridSize;
+  const snappedTerm0Y = Math.round(rawTerm0Y / gridSize) * gridSize;
+
+  // 3. Derive component top-left position
+  const compX = Math.round(snappedTerm0X - cx - rotX0);
+  const compY = Math.round(snappedTerm0Y - cy - rotY0);
+
+  return { x: compX, y: compY };
+}
+
+/**
  * Single Source of Truth for Multimeter Banana Jack Relative Coordinates (Casing transform origin)
  * Derived from DOM elements: .meter-casing-vertical (132x194), .meter-jacks-panel flex distribution
  */
@@ -199,18 +260,15 @@ export function getProbeTipPosition(comp, probeKey, workspace = null) {
   // PRIORITY 2: Probe is attached to a circuit component terminal
   if (probeState?.attachedTo && probeState.attachedTo.compId && probeState.attachedTo.termId) {
     const connEngine = workspace?.connectionEngine;
-    if (connEngine) {
-      const targetPos = connEngine.getTerminalWorldPosition(
-        probeState.attachedTo.compId,
-        probeState.attachedTo.termId
-      );
-      if (targetPos) {
-        return {
-          pos: targetPos,
-          isConnected: true,
-          attachedTo: probeState.attachedTo
-        };
-      }
+    const targetPos = connEngine
+      ? connEngine.getTerminalWorldPosition(probeState.attachedTo.compId, probeState.attachedTo.termId)
+      : getTerminalWorldPosition(probeState.attachedTo.compId, probeState.attachedTo.termId);
+    if (targetPos) {
+      return {
+        pos: targetPos,
+        isConnected: true,
+        attachedTo: probeState.attachedTo
+      };
     }
     // Target terminal / component was deleted or unavailable
     probeState.attachedTo = null;
@@ -243,23 +301,23 @@ export const COMPONENT_PROTOTYPES = {
     name: "Baterai DC",
     icon: "🔋",
     width: 140,
-    height: 70,
+    height: 80,
     defaultProps: { voltage: 12 },
     terminals: [
-      { id: "term_pos", name: "+", label: "+ (12V)", relX: 135, relY: 35, color: "#ef4444" },
-      { id: "term_neg", name: "-", label: "- (GND)", relX: 5, relY: 35, color: "#0f172a" }
+      { id: "term_pos", name: "+", label: "+ (12V)", relX: 130, relY: 40, color: "#ef4444" },
+      { id: "term_neg", name: "-", label: "- (GND)", relX: 10, relY: 40, color: "#0f172a" }
     ]
   },
   switch_spst: {
     type: "switch_spst",
     name: "Saklar Rocker",
     icon: "🎚️",
-    width: 130,
-    height: 75,
+    width: 140,
+    height: 80,
     defaultProps: { isClosed: false },
     terminals: [
-      { id: "term_1", name: "1", label: "Pin Input (1)", relX: 5, relY: 37, color: "#38bdf8" },
-      { id: "term_2", name: "2", label: "Pin Output (2)", relX: 125, relY: 37, color: "#38bdf8" }
+      { id: "term_1", name: "1", label: "Pin Input (1)", relX: 10, relY: 40, color: "#38bdf8" },
+      { id: "term_2", name: "2", label: "Pin Output (2)", relX: 130, relY: 40, color: "#38bdf8" }
     ]
   },
   lamp: {
@@ -267,35 +325,35 @@ export const COMPONENT_PROTOTYPES = {
     name: "Lampu Pijar",
     icon: "💡",
     width: 100,
-    height: 95,
+    height: 100,
     defaultProps: { nominalVoltage: 12, powerRating: 20, resistance: 7.2 },
     terminals: [
-      { id: "term_pos", name: "+", label: "Pin +", relX: 20, relY: 75, color: "#ef4444" },
-      { id: "term_neg", name: "-", label: "Pin -", relX: 80, relY: 75, color: "#0f172a" }
+      { id: "term_pos", name: "+", label: "Pin +", relX: 20, relY: 80, color: "#ef4444" },
+      { id: "term_neg", name: "-", label: "Pin -", relX: 80, relY: 80, color: "#0f172a" }
     ]
   },
   led: {
     type: "led",
     name: "LED Merah",
     icon: "🔴",
-    width: 90,
-    height: 85,
+    width: 80,
+    height: 80,
     defaultProps: { forwardVoltage: 2.0, nominalCurrent: 0.020, maxContinuousCurrent: 0.025 },
     terminals: [
-      { id: "term_anode", name: "A", label: "Anoda (+)", relX: 25, relY: 65, color: "#ef4444" },
-      { id: "term_cathode", name: "K", label: "Katoda (-)", relX: 65, relY: 65, color: "#0f172a" }
+      { id: "term_anode", name: "A", label: "Anoda (+)", relX: 20, relY: 60, color: "#ef4444" },
+      { id: "term_cathode", name: "K", label: "Katoda (-)", relX: 60, relY: 60, color: "#0f172a" }
     ]
   },
   resistor: {
     type: "resistor",
     name: "Resistor",
     icon: "〰️",
-    width: 90,
+    width: 80,
     height: 40,
     defaultProps: { resistance: 220 },
     terminals: [
       { id: "term_a", name: "A", label: "Pin A", relX: 0, relY: 20, color: "#38bdf8" },
-      { id: "term_b", name: "B", label: "Pin B", relX: 90, relY: 20, color: "#38bdf8" }
+      { id: "term_b", name: "B", label: "Pin B", relX: 80, relY: 20, color: "#38bdf8" }
     ]
   },
   multimeter: {
@@ -339,20 +397,20 @@ export const COMPONENT_PROTOTYPES = {
       direction: "CW"
     },
     terminals: [
-      { id: "term_pos", name: "+", label: "Pin + (Merah)", relX: 20, relY: 75, color: "#ef4444" },
-      { id: "term_neg", name: "-", label: "Pin - (Hitam)", relX: 100, relY: 75, color: "#0f172a" }
+      { id: "term_pos", name: "+", label: "Pin + (Merah)", relX: 20, relY: 80, color: "#ef4444" },
+      { id: "term_neg", name: "-", label: "Pin - (Hitam)", relX: 100, relY: 80, color: "#0f172a" }
     ]
   },
   diode: {
     type: "diode",
     name: "Dioda 1N4007",
     icon: "🔺",
-    width: 84,
+    width: 80,
     height: 40,
     defaultProps: { forwardVoltage: 0.7, model: "1N4007", state: "IDLE", resistance: 0.5 },
     terminals: [
       { id: "term_anode", name: "A", label: "Anoda (A / +)", relX: 0, relY: 20, color: "#38bdf8" },
-      { id: "term_cathode", name: "K", label: "Katoda (K / - Garis)", relX: 84, relY: 20, color: "#94a3b8" }
+      { id: "term_cathode", name: "K", label: "Katoda (K / - Garis)", relX: 80, relY: 20, color: "#94a3b8" }
     ]
   }
 };
@@ -414,7 +472,8 @@ export class ComponentEngine {
           const gridSize = this.workspace.gridSize || 20;
           const rawX = pos.x - Math.round(COMPONENT_PROTOTYPES[type].width / 2);
           const rawY = pos.y - Math.round(COMPONENT_PROTOTYPES[type].height / 2);
-          this.createComponent(type, Math.round(rawX / gridSize) * gridSize, Math.round(rawY / gridSize) * gridSize);
+          const snapped = snapComponentToGrid(rawX, rawY, COMPONENT_PROTOTYPES[type], gridSize);
+          this.createComponent(type, snapped.x, snapped.y);
         }
       });
     });
@@ -458,27 +517,35 @@ export class ComponentEngine {
       
       const rawX = pos.x - Math.round(proto.width / 2);
       const rawY = pos.y - Math.round(proto.height / 2);
-      const x = Math.round(rawX / gridSize) * gridSize;
-      const y = Math.round(rawY / gridSize) * gridSize;
+      const snapped = snapComponentToGrid(rawX, rawY, proto, gridSize);
 
-      this.createComponent(type, x, y);
+      this.createComponent(type, snapped.x, snapped.y);
     });
   }
 
   bindKeyboardEvents() {
     window.addEventListener("keydown", (e) => {
       const state = stateManager.getState();
+      if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
       
       if (state.selection.type === "component" && state.selection.id) {
-        if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
-
         if (e.key === "r" || e.key === "R") {
           e.preventDefault();
           stateManager.rotateComponent(state.selection.id, 90);
         }
 
         if (e.key === "Delete" || e.key === "Backspace") {
+          e.preventDefault();
           stateManager.deleteComponent(state.selection.id);
+        }
+      } else if (state.selection.type === "connection" && state.selection.id) {
+        if (e.key === "Delete" || e.key === "Backspace") {
+          e.preventDefault();
+          if (this.workspace?.connectionEngine) {
+            this.workspace.connectionEngine.deleteConnection(state.selection.id);
+          } else {
+            stateManager.deleteConnection(state.selection.id);
+          }
         }
       }
     });
@@ -518,6 +585,12 @@ export class ComponentEngine {
         finalY += 30;
         attempts++;
       }
+    }
+
+    if (type !== "multimeter") {
+      const snapped = snapComponentToGrid(finalX, finalY, proto, this.workspace?.gridSize || 20);
+      finalX = snapped.x;
+      finalY = snapped.y;
     }
 
     const newComponent = {
@@ -729,6 +802,11 @@ export class ComponentEngine {
         termEl.style.left = `${term.relX}px`;
         termEl.style.top = `${term.relY}px`;
         termEl.title = `${comp.name}: ${term.label}`;
+
+        const dotEl = document.createElement("div");
+        dotEl.className = "terminal-dot";
+        termEl.appendChild(dotEl);
+
         el.appendChild(termEl);
       });
     } else {
@@ -1039,6 +1117,10 @@ export class ComponentEngine {
             <div class="lamp-filament"></div>
           </div>
           <div class="lamp-base"></div>
+          <div class="lamp-leads-container">
+            <div class="lamp-lead-wire lamp-lead-left"></div>
+            <div class="lamp-lead-wire lamp-lead-right"></div>
+          </div>
           <div class="lamp-label" id="lamp-lbl-${comp.id}">${comp.properties.powerRating}W / ${comp.properties.nominalVoltage}V</div>
         </div>
       `;
@@ -1154,10 +1236,25 @@ export class ComponentEngine {
         </div>
       `;
     } else if (comp.type === "led") {
+      const vf = comp.properties?.forwardVoltage || 2;
+      const lbl = comp.properties?.label || `LED ${vf}V`;
       return `
         <div class="led-visual" id="led-vis-${comp.id}">
-          <div class="led-dome"></div>
-          <div class="led-label">LED 2V</div>
+          <div class="led-leads-container">
+            <div class="led-lead-wire led-lead-anode"></div>
+            <div class="led-lead-wire led-lead-cathode"></div>
+          </div>
+          <div class="led-casing">
+            <div class="led-dome">
+              <div class="led-specular-highlight"></div>
+              <div class="led-die-core">
+                <div class="led-post"></div>
+                <div class="led-anvil"></div>
+              </div>
+            </div>
+            <div class="led-flange"></div>
+          </div>
+          <div class="led-label" id="led-lbl-${comp.id}">${lbl}</div>
         </div>
       `;
     } else if (comp.type === "motor_dc") {
@@ -1259,6 +1356,10 @@ export class ComponentEngine {
     } else if (comp.type === "lamp") {
       const lbl = el.querySelector(`#lamp-lbl-${comp.id}`);
       if (lbl) lbl.textContent = `${comp.properties.powerRating}W / ${comp.properties.nominalVoltage}V`;
+    } else if (comp.type === "led") {
+      const lbl = el.querySelector(`#led-lbl-${comp.id}`) || el.querySelector(".led-label");
+      const vf = comp.properties?.forwardVoltage || 2;
+      if (lbl) lbl.textContent = comp.properties?.label || `LED ${vf}V`;
     } else if (comp.type === "multimeter") {
       const powerOn = comp.properties.powerOn !== false;
       const holdEnabled = comp.properties.holdEnabled === true;
@@ -1394,12 +1495,14 @@ export class ComponentEngine {
         const clientX = e.clientX ?? e.touches?.[0]?.clientX;
         const clientY = e.clientY ?? e.touches?.[0]?.clientY;
         if (clientX !== undefined && clientY !== undefined) {
-          const rawPos = this.workspace.screenToCanvas(clientX, clientY);
+          const rawPos = this.workspace?.screenToCanvasRaw 
+            ? this.workspace.screenToCanvasRaw(clientX, clientY) 
+            : this.workspace.screenToCanvas(clientX, clientY);
           const nearTerm = this.workspace.connectionEngine.findNearestTerminalSnap(rawPos.x, rawPos.y, 45);
           if (nearTerm) {
             e.stopPropagation();
             if (e.cancelable) e.preventDefault();
-            this.workspace.connectionEngine.handleTerminalClick(nearTerm.compId, nearTerm.termId, nearTerm.el);
+            this.workspace.connectionEngine.handleTerminalClick(nearTerm.compId, nearTerm.termId, nearTerm.el, e);
             return;
           }
         }
@@ -1464,13 +1567,12 @@ export class ComponentEngine {
           const gridSize = this.workspace.gridSize || 20;
           const rawX = compStartX + deltaX;
           const rawY = compStartY + deltaY;
-          const newX = Math.round(rawX / gridSize) * gridSize;
-          const newY = Math.round(rawY / gridSize) * gridSize;
+          const snapped = snapComponentToGrid(rawX, rawY, comp, gridSize);
 
-          el.style.left = `${newX}px`;
-          el.style.top = `${newY}px`;
-          comp.x = newX;
-          comp.y = newY;
+          el.style.left = `${snapped.x}px`;
+          el.style.top = `${snapped.y}px`;
+          comp.x = snapped.x;
+          comp.y = snapped.y;
 
           this.updateAllMultimeterProbes();
 
@@ -1496,13 +1598,12 @@ export class ComponentEngine {
 
         if (hasMoved) {
           const gridSize = this.workspace.gridSize || 20;
-          const finalX = Math.round(comp.x / gridSize) * gridSize;
-          const finalY = Math.round(comp.y / gridSize) * gridSize;
-          comp.x = finalX;
-          comp.y = finalY;
-          el.style.left = `${finalX}px`;
-          el.style.top = `${finalY}px`;
-          stateManager.updateComponentPosition(comp.id, finalX, finalY);
+          const snapped = snapComponentToGrid(comp.x, comp.y, comp, gridSize);
+          comp.x = snapped.x;
+          comp.y = snapped.y;
+          el.style.left = `${snapped.x}px`;
+          el.style.top = `${snapped.y}px`;
+          stateManager.updateComponentPosition(comp.id, snapped.x, snapped.y);
           this.updateAllMultimeterProbes();
         } else {
           if (comp.type === "switch_spst") {
@@ -1934,7 +2035,7 @@ export class ComponentEngine {
     });
   }
 
-  calculateProbeWirePath(startX, startY, endX, endY) {
+  calculateProbeWirePath(startX, startY, endX, endY, probeAngle = 0) {
     const dx = endX - startX;
     const dy = endY - startY;
     const dist = Math.hypot(dx, dy);
@@ -1942,36 +2043,57 @@ export class ComponentEngine {
     // Natural cable sag factor based on distance
     const sag = Math.min(80, Math.max(20, dist * 0.22));
 
-    // Control point 1: leaves the multimeter socket going straight downwards then curves
+    // Tangent lead length leaving rear connector along probe longitudinal axis (16-32px)
+    const tangentLen = Math.min(32, Math.max(16, dist * 0.15));
+
+    const rad = ((probeAngle || 0) * Math.PI) / 180;
+    const rearDirX = Math.sin(rad);
+    const rearDirY = -Math.cos(rad);
+
+    // Control point 1: leaves the multimeter socket dropping smoothly
     const cp1x = Math.round(startX + dx * 0.15);
     const cp1y = Math.round(startY + sag + (dy > 0 ? dy * 0.15 : 0));
 
-    // Control point 2: enters the top of the probe lead collar
-    const cp2x = Math.round(endX - dx * 0.15);
-    const cp2y = Math.round(endY - sag * 0.55 + (dy < 0 ? dy * 0.15 : 0));
+    // Control point 2: approaches rear connector strictly along probe longitudinal axis
+    const cp2x = Math.round(endX + rearDirX * tangentLen);
+    const cp2y = Math.round(endY + rearDirY * tangentLen);
 
     return `M ${startX} ${startY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${endX} ${endY}`;
   }
 
   /**
    * Calculates the probe orientation and top cable entry coordinates
-   * Connected: stands upright (angle = 0) plugged into pin socket depth (40px)
-   * Idle: docks aligned with multimeter body casing (52px)
+   * Baseline layout: probes stand upright above terminal (angle = 0 deg) at component rotation = 0 deg
+   * Attached probe inherits the attached component's rotation as a group: finalAngle = 0 + attachedComp.rotation
+   * Idle / docked: rotates with multimeter casing
    */
-  calculateProbeOrientation(probePos, jackPos, isConnected, compRotation = 0) {
+  calculateProbeOrientation(probePos, jackPos, isConnected, compRotation = 0, attachedTarget = null) {
     const targetX = probePos.x;
     const targetY = probePos.y;
 
-    // Connected state: stands upright on pin (0 deg)
-    // Idle / docked state: rotates with multimeter casing
-    const angleDeg = isConnected ? 0 : (compRotation || 0);
+    let angleDeg = 0;
+    if (isConnected && attachedTarget?.compId) {
+      const state = stateManager.getState();
+      const targetComp = state.components?.find(c => c.id === attachedTarget.compId);
+      angleDeg = (targetComp?.rotation || 0) % 360;
+    } else if (!isConnected) {
+      // Idle / docked state: rotates with multimeter casing
+      angleDeg = (compRotation || 0) % 360;
+    }
+
+    if (angleDeg < 0) angleDeg += 360;
+
     const rad = (angleDeg * Math.PI) / 180;
 
-    // Y offset when plugged into pin (40px) vs idle on casing (52px)
-    const probeHeightOffset = isConnected ? 40 : 52;
-    const topY = targetY - probeHeightOffset;
-    const cableX = Math.round(targetX + probeHeightOffset * Math.sin(rad));
-    const cableY = Math.round(targetY - probeHeightOffset * Math.cos(rad));
+    // Anchor is metallic probe tip apex at local (12, 52)
+    // Placing probeEl at left: (targetX - 12), top: (targetY - 52)
+    // with transformOrigin: "12px 52px" keeps the tip apex EXACTLY on (targetX, targetY) across all rotations!
+    const topY = targetY - 52;
+
+    // Cable entry is at local (12, 0) - exactly 52px along the probe body from tip
+    // In world coordinates after rotation around tip:
+    const cableX = Math.round(targetX + 52 * Math.sin(rad));
+    const cableY = Math.round(targetY - 52 * Math.cos(rad));
 
     return { angleDeg, topY, cableX, cableY, targetX, targetY };
   }
@@ -2011,7 +2133,11 @@ export class ComponentEngine {
         })();
 
     const tipInfo = this.getProbeTipPosition(comp, probeKey);
-    const orient = this.calculateProbeOrientation(tipInfo.pos, handoffPos, tipInfo.isConnected, comp.rotation || 0);
+    const probeState = comp.properties?.probes?.[probeKey];
+    const attachedTarget = tipInfo.attachedTo || probeState?.snapCandidate || null;
+    const isConnected = tipInfo.isConnected || !!probeState?.snapCandidate;
+
+    const orient = this.calculateProbeOrientation(tipInfo.pos, handoffPos, isConnected, comp.rotation || 0, attachedTarget);
 
     const probeEl = document.getElementById(`probe-${probeKey}-${comp.id}`);
     if (probeEl) {
@@ -2024,7 +2150,7 @@ export class ComponentEngine {
     // 1. Main Cable (in background SVG layer, starts from handoffPos at casing edge)
     const wireEl = document.getElementById(`meter-wire-${probeKey}-${comp.id}`);
     if (wireEl) {
-      wireEl.setAttribute("d", this.calculateProbeWirePath(handoffPos.x, handoffPos.y, orient.cableX, orient.cableY));
+      wireEl.setAttribute("d", this.calculateProbeWirePath(handoffPos.x, handoffPos.y, orient.cableX, orient.cableY, orient.angleDeg));
     }
 
     // 2. Front Banana Plug (in front SVG layer, positioned directly at jackPos)
@@ -2175,11 +2301,13 @@ export class ComponentEngine {
 
     // 3. Update Red Main Cable (in background SVG layer) from animHandoffWorld to circuit-side probe tip
     const tipInfo = this.getProbeTipPosition(comp, "vwma");
-    const orient = this.calculateProbeOrientation(tipInfo.pos, animHandoffWorld, tipInfo.isConnected, comp.rotation || 0);
+    const probeState = comp.properties?.probes?.vwma;
+    const attachedTarget = tipInfo.attachedTo || probeState?.snapCandidate || null;
+    const orient = this.calculateProbeOrientation(tipInfo.pos, animHandoffWorld, tipInfo.isConnected, comp.rotation || 0, attachedTarget);
 
     const wireEl = document.getElementById(`meter-wire-vwma-${comp.id}`);
     if (wireEl) {
-      wireEl.setAttribute("d", this.calculateProbeWirePath(animHandoffWorld.x, animHandoffWorld.y, orient.cableX, orient.cableY));
+      wireEl.setAttribute("d", this.calculateProbeWirePath(animHandoffWorld.x, animHandoffWorld.y, orient.cableX, orient.cableY, orient.angleDeg));
     }
 
     if (progress < 1) {
@@ -2222,8 +2350,9 @@ export class ComponentEngine {
           </linearGradient>
         </defs>
         
-        <!-- Top Cable Strain Relief (y: 0-4, center x=12) -->
-        <rect x="9" y="0" width="6" height="4" rx="1.5" fill="#0f172a" stroke="#334155" stroke-width="0.75"/>
+        <!-- Top Cable Strain Relief & Flexible Collar (y: 0-4.5, center x=12) -->
+        <rect x="9.25" y="0" width="5.5" height="2" rx="1" fill="#0f172a" stroke="#334155" stroke-width="0.6"/>
+        <rect x="8.5" y="1.8" width="7" height="2.7" rx="1.2" fill="#1e293b" stroke="#0f172a" stroke-width="0.7"/>
         
         <!-- Molded Finger Guard (y: 4-8.5, width: 20) -->
         <rect x="2" y="4" width="20" height="4.5" rx="2" fill="${gradDark}" stroke="#0f172a" stroke-width="1"/>
@@ -2430,9 +2559,11 @@ export class ComponentEngine {
           activeSnap.el?.classList.add("probe-snap-highlight");
           currentProbeState.dragWorldX = activeSnap.pos.x;
           currentProbeState.dragWorldY = activeSnap.pos.y;
+          currentProbeState.snapCandidate = { compId: activeSnap.compId, termId: activeSnap.termId };
         } else {
           currentProbeState.dragWorldX = rawPos.x;
           currentProbeState.dragWorldY = rawPos.y;
+          delete currentProbeState.snapCandidate;
         }
 
         // Realtime render of probe tip and dynamic cable bezier path
@@ -2484,6 +2615,7 @@ export class ComponentEngine {
         currentProbe.isDragging = false;
         delete currentProbe.dragWorldX;
         delete currentProbe.dragWorldY;
+        delete currentProbe.snapCandidate;
 
         let branchTaken;
         if (!hasMoved) {
@@ -2573,6 +2705,7 @@ export class ComponentEngine {
         currentProbe.isDragging = false;
         delete currentProbe.dragWorldX;
         delete currentProbe.dragWorldY;
+        delete currentProbe.snapCandidate;
 
         // ONLY ON CANCEL / ESCAPE: Return to dock
         currentProbe.attachedTo = null;
@@ -2649,7 +2782,7 @@ export class ComponentEngine {
         probeEl.style.transform = orient.angleDeg ? `rotate(${orient.angleDeg}deg)` : "none";
       }
       if (wireEl) {
-        wireEl.setAttribute("d", this.calculateProbeWirePath(handoffPos.x, handoffPos.y, orient.cableX, orient.cableY));
+        wireEl.setAttribute("d", this.calculateProbeWirePath(handoffPos.x, handoffPos.y, orient.cableX, orient.cableY, orient.angleDeg));
       }
 
       if (progress < 1) {

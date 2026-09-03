@@ -222,9 +222,9 @@ export class MeasurementEngine {
 
       if (liveVoltage > 0.1 && (circuitResult?.totalCurrent || 0) > 0.001) {
         return {
-          readingText: "ERR: LIVE",
+          readingText: "ERR",
           rawValue: 0,
-          unit: "Ω",
+          unit: "LIVE",
           isWarning: true,
           warningMessage: "⚠️ Matikan sumber daya sebelum mengukur resistansi!"
         };

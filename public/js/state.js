@@ -1,7 +1,16 @@
 /**
- * DTE VirtualLab V2 — Central State Management
- * Single Source of Truth for Application State
+ * Calculates the responsive default workspace zoom based on viewport width.
+ * Desktop (> 1024px): 100% (1.00)
+ * Tablet (769px - 1024px): 82% (0.82)
+ * Mobile (431px - 768px): 60% (0.60)
+ * Narrow Mobile (<= 430px): 58% (0.58)
  */
+export function getDefaultWorkspaceZoom(width = (typeof window !== "undefined" ? window.innerWidth : 1200)) {
+  if (width <= 430) return 0.58;
+  if (width <= 768) return 0.60;
+  if (width <= 1024) return 0.82;
+  return 1.0;
+}
 
 class AppState {
   constructor() {
@@ -14,7 +23,7 @@ class AppState {
         id: null
       },
       workspace: {
-        zoom: 1.0,
+        zoom: getDefaultWorkspaceZoom(),
         panX: 0,
         panY: 0,
         gridSize: 20,
@@ -142,6 +151,34 @@ class AppState {
     if (comp) {
       this.recordHistory();
       comp.rotation = ((comp.rotation || 0) + angle) % 360;
+      if (comp.type !== "multimeter" && comp.terminals && comp.terminals.length > 0) {
+        const t0 = comp.terminals[0];
+        const width = comp.width;
+        const height = comp.height;
+        const rotation = comp.rotation || 0;
+        const gridSize = this.state.workspace?.gridSize || 20;
+
+        const cx = width / 2;
+        const cy = height / 2;
+        const dx = t0.relX - cx;
+        const dy = t0.relY - cy;
+
+        const rad = (rotation * Math.PI) / 180;
+        const cos = Math.cos(rad);
+        const sin = Math.sin(rad);
+
+        const rotX0 = dx * cos - dy * sin;
+        const rotY0 = dx * sin + dy * cos;
+
+        const rawTerm0X = comp.x + cx + rotX0;
+        const rawTerm0Y = comp.y + cy + rotY0;
+
+        const snappedTerm0X = Math.round(rawTerm0X / gridSize) * gridSize;
+        const snappedTerm0Y = Math.round(rawTerm0Y / gridSize) * gridSize;
+
+        comp.x = Math.round(snappedTerm0X - cx - rotX0);
+        comp.y = Math.round(snappedTerm0Y - cy - rotY0);
+      }
       this.notify("components");
       this.notify("connections");
     }
@@ -170,6 +207,27 @@ class AppState {
     this.notify("connections");
   }
 
+  deleteConnection(id) {
+    this.recordHistory();
+    this.state.connections = this.state.connections.filter(c => 
+      c.id !== id && c.to?.targetWireId !== id && c.from?.targetWireId !== id
+    );
+    if (this.state.selection.id === id) {
+      this.setSelection(null, null);
+    }
+    this.notify("connections");
+  }
+
+  deleteSelection() {
+    const { type, id } = this.state.selection;
+    if (!type || !id) return;
+    if (type === "component") {
+      this.deleteComponent(id);
+    } else if (type === "connection") {
+      this.deleteConnection(id);
+    }
+  }
+
   // --- Selection ---
   setSelection(type, id) {
     this.state.selection = { type, id };
@@ -187,7 +245,7 @@ class AppState {
   resetWorkspace() {
     this.state.workspace.panX = 0;
     this.state.workspace.panY = 0;
-    this.state.workspace.zoom = (window.innerWidth < 768) ? 0.78 : 1.0;
+    this.state.workspace.zoom = getDefaultWorkspaceZoom();
     this.notify("workspace");
   }
 

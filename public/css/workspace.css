@@ -10,7 +10,7 @@
   position: relative;
   overflow: hidden;
   background-color: #f8fafc !important;
-  background-image: radial-gradient(circle, #cbd5e1 1.5px, transparent 1.5px) !important;
+  background-image: radial-gradient(circle at 0px 0px, #cbd5e1 1.5px, transparent 1.5px) !important;
   background-size: 20px 20px;
   cursor: default;
   user-select: none;
@@ -190,15 +190,15 @@
 /* Orthogonal Route Handles & Floating Toolbar */
 .wire-handle.orthogonal-handle {
   position: absolute;
-  width: 12px;
-  height: 12px;
-  background-color: var(--color-primary-blue);
-  border: 2px solid #ffffff;
+  width: 9px;
+  height: 9px;
+  background-color: var(--color-primary-blue, #0284c7);
+  border: 1.5px solid #ffffff;
   border-radius: 2px;
   transform: translate(-50%, -50%);
   cursor: move;
   pointer-events: auto;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
   z-index: 30;
 }
 
@@ -233,63 +233,94 @@
 }
 
 /* --------------------------------------------------------------------------
-   Terminal Pins
+   Terminal Pins (CAD Style: Robust Two-Layer Anchor + Dot Architecture)
+   Parent (.terminal-node) is the Fixed Anchor & Hitbox
+   Child (.terminal-dot) is the Scaled Visual Marker (Transforms only around its center)
    -------------------------------------------------------------------------- */
 .terminal-node {
-  width: 14px;
-  height: 14px;
-  border-radius: var(--radius-full);
-  background: radial-gradient(circle at 35% 35%, #ffffff 0%, #cbd5e1 55%, #94a3b8 100%);
-  border: 2px solid #334155;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35), inset 0 1px 2px rgba(255, 255, 255, 0.8);
   position: absolute;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
   transform: translate(-50%, -50%);
+  border: none;
+  background: transparent;
   cursor: crosshair;
   pointer-events: auto;
-  transition: transform 0.15s ease, border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
   z-index: 25;
   touch-action: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-/* Expanded Touch Hitbox (Invisible 42px Touch Target for Mobile & Touchscreens) */
-.terminal-node::after {
-  content: "";
+@media (pointer: coarse), (hover: none) {
+  .terminal-node {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+/* STATE A — UNCONNECTED / IDLE: Small clean neutral dot (6px) */
+.terminal-node .terminal-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1.2px solid #475569;
+  box-sizing: border-box;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transform: scale(var(--inv-zoom, 1));
+  transform-origin: center center;
+  pointer-events: none;
+  transition: transform 0.1s ease, border-color 0.1s ease, background-color 0.1s ease, box-shadow 0.1s ease;
+}
+
+/* STATE B — CONNECTED: Minimal subtle center dot (3.5px, merges lead seamlessly with wire) */
+.terminal-node.connected .terminal-dot {
+  width: 3.5px;
+  height: 3.5px;
+  background: #334155;
+  border: 0.8px solid #1e293b;
+  box-shadow: none;
+}
+
+/* STATE C — HOVER / SNAP TARGET: Temporary highlight (~9.5px) */
+.terminal-node:hover .terminal-dot {
+  transform: scale(calc(var(--inv-zoom, 1) * 1.5));
+  border-color: #38bdf8;
+  background: #0284c7;
+  box-shadow: 0 0 6px rgba(56, 189, 248, 0.95);
+}
+
+.terminal-node.snap-hover .terminal-dot {
+  transform: scale(calc(var(--inv-zoom, 1) * 1.55)) !important;
+  border-color: #38bdf8 !important;
+  background: #0284c7 !important;
+  box-shadow: 0 0 7px rgba(56, 189, 248, 0.95) !important;
+}
+
+.terminal-node.connecting-source .terminal-dot {
+  transform: scale(calc(var(--inv-zoom, 1) * 1.5)) !important;
+  border-color: #0284c7 !important;
+  background: #38bdf8 !important;
+  box-shadow: 0 0 6px rgba(2, 132, 199, 0.95) !important;
+}
+
+/* Waypoint Handle: Constant ~6px Screen-Space Size for Selected Manual Waypoints */
+.wire-handle.orthogonal-handle {
   position: absolute;
-  top: 50%;
-  left: 50%;
+  width: calc(6px * var(--inv-zoom, 1));
+  height: calc(6px * var(--inv-zoom, 1));
+  background-color: var(--color-primary-blue, #0284c7);
+  border: calc(1px * var(--inv-zoom, 1)) solid #ffffff;
+  border-radius: calc(1.5px * var(--inv-zoom, 1));
   transform: translate(-50%, -50%);
-  width: 42px;
-  height: 42px;
-  border-radius: var(--radius-full);
-  background: transparent;
+  cursor: move;
   pointer-events: auto;
-}
-
-.terminal-node:hover {
-  transform: translate(-50%, -50%) scale(1.4);
-  border-color: var(--color-primary-blue);
-  background: radial-gradient(circle at 35% 35%, #93c5fd 0%, #3b82f6 100%);
-  box-shadow: 0 0 10px rgba(59, 130, 246, 0.7);
-}
-
-.terminal-node.connecting-source {
-  border-color: var(--color-primary-yellow);
-  background: radial-gradient(circle at 35% 35%, #fef08a 0%, #eab308 100%);
-  transform: translate(-50%, -50%) scale(1.5);
-  box-shadow: 0 0 12px rgba(234, 179, 8, 0.9);
-}
-
-.terminal-node.snap-hover {
-  border-color: #00c853 !important;
-  background: radial-gradient(circle at 35% 35%, #bbf7d0 0%, #22c55e 100%) !important;
-  transform: translate(-50%, -50%) scale(1.6) !important;
-  box-shadow: 0 0 14px rgba(34, 197, 94, 0.95), 0 0 24px rgba(74, 222, 128, 0.6) !important;
-}
-
-.terminal-node.connected {
-  background: radial-gradient(circle at 35% 35%, #fde68a 0%, #f59e0b 60%, #b45309 100%);
-  border-color: #78350f;
-  box-shadow: 0 0 8px rgba(245, 158, 11, 0.5), 0 2px 4px rgba(0, 0, 0, 0.4), inset 0 1px 2px rgba(255, 255, 255, 0.9);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  z-index: 30;
 }
 
 /* --------------------------------------------------------------------------
@@ -316,47 +347,51 @@
 }
 
 /* --------------------------------------------------------------------------
-   Hanging / Cut Wire Open Endpoint Node (Proteus Style)
+   Wire Junction / Branch Nodes
    -------------------------------------------------------------------------- */
-.hanging-wire-node {
-  width: 14px;
-  height: 14px;
-  border-radius: var(--radius-full);
-  background-color: #f59e0b;
-  border: 2.5px solid #ffffff;
+.wire-junction-node {
   position: absolute;
+  width: 24px;
+  height: 24px;
   transform: translate(-50%, -50%);
+  background: transparent;
+  border: none;
   cursor: crosshair;
   pointer-events: auto;
   touch-action: none !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   z-index: 26;
-  box-shadow: 0 0 8px rgba(245, 158, 11, 0.8), 0 2px 6px rgba(0, 0, 0, 0.3);
-  transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
 }
 
-.hanging-wire-node::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-full);
-  background: transparent;
-  pointer-events: auto;
+@media (pointer: coarse), (hover: none) {
+  .wire-junction-node {
+    width: 36px;
+    height: 36px;
+  }
 }
 
-.hanging-wire-node:hover,
-.hanging-wire-node:active {
-  transform: translate(-50%, -50%) scale(1.4);
-  background-color: #fbbf24;
-  box-shadow: 0 0 14px rgba(251, 191, 36, 0.95), 0 0 20px rgba(245, 158, 11, 0.7);
+.wire-junction-node .wire-junction-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #0284c7;
+  border: 1.5px solid #ffffff;
+  box-sizing: border-box;
+  transform: scale(var(--inv-zoom, 1));
+  transform-origin: center center;
+  pointer-events: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  transition: transform 0.12s ease, background-color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
-.hanging-wire-node.connecting-source {
-  border-color: #38bdf8;
-  background-color: #0284c7;
-  transform: translate(-50%, -50%) scale(1.5);
-  box-shadow: 0 0 14px rgba(56, 189, 248, 0.95);
+.wire-junction-node:hover .wire-junction-dot,
+.wire-junction-node:active .wire-junction-dot {
+  background: #38bdf8;
+  border-color: #ffffff;
+  transform: scale(calc(var(--inv-zoom, 1) * 1.5));
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.95);
 }
+
+

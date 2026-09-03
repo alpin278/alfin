@@ -4,6 +4,7 @@
  */
 
 import { stateManager } from "./state.js";
+import { getTerminalWorldPosition } from "./components.js";
 
 let connectionCounter = 1;
 
@@ -54,6 +55,7 @@ export class ConnectionEngine {
     stateManager.subscribe("components", () => this.renderWires());
     stateManager.subscribe("components_moving", () => this.renderWires());
     stateManager.subscribe("selection", () => {
+      this.renderWires();
       this.updateSelectionVisuals();
       this.renderFloatingToolbar();
     });
@@ -149,7 +151,9 @@ export class ConnectionEngine {
         }
       }
 
-      const rawPos = this.workspace.screenToCanvas(e.clientX, e.clientY);
+      const rawPos = this.workspace?.screenToCanvasRaw 
+        ? this.workspace.screenToCanvasRaw(e.clientX, e.clientY) 
+        : this.workspace.screenToCanvas(e.clientX, e.clientY);
       
       // Screen-space magnetic tolerances with hysteresis
       const zoom = this.workspace?.zoom || 1;
@@ -192,7 +196,11 @@ export class ConnectionEngine {
           }
         } else {
           this.snapTarget = null;
-          this.currentMousePos = rawPos;
+          const gridSize = this.workspace?.gridSize || 20;
+          this.currentMousePos = {
+            x: Math.round(rawPos.x / gridSize) * gridSize,
+            y: Math.round(rawPos.y / gridSize) * gridSize
+          };
           if (this.snapIndicator) {
             this.snapIndicator.style.display = "none";
           }
@@ -203,13 +211,13 @@ export class ConnectionEngine {
     };
 
     const onPointerUp = (e) => {
-      if (!this.isConnecting || !this.sourceTerminal) return;
-
       if (this.activeTerminalEl && this.activeTerminalPointerId !== null) {
         try { this.activeTerminalEl.releasePointerCapture(this.activeTerminalPointerId); } catch (err) {}
       }
       this.activeTerminalPointerId = null;
       this.activeTerminalEl = null;
+
+      if (!this.isConnecting || !this.sourceTerminal) return;
 
       // If user performed a continuous drag-and-drop gesture to a terminal or wire branch:
       if (this.isDraggingWire && this.dragHasMoved) {
@@ -283,36 +291,13 @@ export class ConnectionEngine {
 
     const container = this.workspace.container;
     if (container) {
-      // Double click to cut wire on desktop
-      container.addEventListener("dblclick", (e) => {
-        if (!this.isConnecting) return;
-        e.stopPropagation();
-        e.preventDefault();
-        const rawPos = this.workspace.screenToCanvas(e.clientX, e.clientY);
-        this.cutWireAtPoint(rawPos.x, rawPos.y);
-      });
-
       // Helper method for canvas tap action during wire connection (click-to-connect mode)
       const handleCanvasTapAction = (e, clientX, clientY) => {
         if (!this.isConnecting) return;
 
-        if (e.target.closest(".terminal-node") || e.target.closest(".smart-number-badge") || e.target.closest(".hanging-wire-node") || e.target.closest(".probe-assembly")) {
+        if (e.target.closest(".terminal-node") || e.target.closest(".smart-number-badge") || e.target.closest(".probe-assembly")) {
           return;
         }
-
-        const now = Date.now();
-
-        // Double-tap cut detection for mobile & touchscreen (< 350ms)
-        if (now - this.lastTapTime < 350 && Math.hypot(clientX - this.lastTapPos.x, clientY - this.lastTapPos.y) < 45) {
-          e.stopPropagation();
-          if (e.cancelable) e.preventDefault();
-          const rawPos = this.workspace.screenToCanvas(clientX, clientY);
-          this.cutWireAtPoint(rawPos.x, rawPos.y);
-          this.lastTapTime = 0;
-          return;
-        }
-        this.lastTapTime = now;
-        this.lastTapPos = { x: clientX, y: clientY };
 
         // 1. If snapped to a valid terminal (highlight is active) -> FINISH CONNECTION!
         if (this.hoveredTerminal) {
@@ -522,69 +507,124 @@ export class ConnectionEngine {
     }
   }
 
-  handleHangingNodeClick(conn, point, nodeEl, e) {
-    if (!this.isConnecting) {
-      this.isConnecting = true;
-      this.isDraggingWire = true;
-      this.dragHasMoved = false;
-      const clientX = e?.clientX ?? (e?.touches && e.touches[0] ? e.touches[0].clientX : 0);
-      const clientY = e?.clientY ?? (e?.touches && e.touches[0] ? e.touches[0].clientY : 0);
-      this.dragStartCoords = { x: clientX, y: clientY };
+  /**
+   * Add a persistent junction point to an existing wire
+   */
+  addWireJunction(conn, clickX, clickY) {
+    if (!conn) return null;
+    const p1 = this.getConnectionEndpoint(conn.from);
+    const p2 = this.getConnectionEndpoint(conn.to);
+    if (!p1 || !p2) return null;
 
-      this.sourceHangingWire = conn;
-      this.sourceTerminal = {
-        isHanging: true,
-        connectionId: conn.id,
-        worldX: point.x,
-        worldY: point.y
-      };
-      this.waypoints = conn.waypoints ? [...conn.waypoints] : [];
-      this.snapTarget = null;
-      this.hoveredTerminal = null;
+    const poly = this.getPolylinePoints(p1, p2, conn.waypoints);
+    if (poly.length < 2) return null;
 
-      nodeEl.classList.add("connecting-source");
-      if (this.wirePreview) {
-        this.wirePreview.style.display = "block";
-        this.currentMousePos = { x: point.x, y: point.y };
-        this.drawWirePreview();
+    // 1. Find the nearest segment [poly[i], poly[i+1]] to the click
+    let bestSegIdx = 0;
+    let minDistance = Infinity;
+    let bestClosestPt = { x: clickX, y: clickY };
+
+    for (let i = 0; i < poly.length - 1; i++) {
+      const a = poly[i];
+      const b = poly[i + 1];
+      const closest = this.getClosestPointOnSegment(a, b, { x: clickX, y: clickY });
+      const dist = Math.hypot(clickX - closest.x, clickY - closest.y);
+      if (dist < minDistance) {
+        minDistance = dist;
+        bestSegIdx = i;
+        bestClosestPt = closest;
       }
-      this.updateCancelButtonUI(true);
-    } else {
-      this.cutWireAtPoint(point.x, point.y);
     }
+
+    const segA = poly[bestSegIdx];
+    const segB = poly[bestSegIdx + 1];
+    const gridSize = this.workspace?.gridSize || 20;
+
+    // 2. Snap strictly to the workspace grid on the segment
+    let snappedX = bestClosestPt.x;
+    let snappedY = bestClosestPt.y;
+
+    const isHorizontal = Math.abs(segA.y - segB.y) < 1e-4;
+    if (isHorizontal) {
+      snappedY = segA.y;
+      snappedX = Math.round(bestClosestPt.x / gridSize) * gridSize;
+      const minX = Math.min(segA.x, segB.x);
+      const maxX = Math.max(segA.x, segB.x);
+      snappedX = Math.max(minX, Math.min(maxX, snappedX));
+    } else {
+      snappedX = segA.x;
+      snappedY = Math.round(bestClosestPt.y / gridSize) * gridSize;
+      const minY = Math.min(segA.y, segB.y);
+      const maxY = Math.max(segA.y, segB.y);
+      snappedY = Math.max(minY, Math.min(maxY, snappedY));
+    }
+
+    // 3. Initialize junctions array if not present
+    if (!Array.isArray(conn.junctions)) {
+      conn.junctions = [];
+    }
+
+    // 4. Duplicate Check: If a junction already exists within 10px, do NOT add duplicate
+    const existing = conn.junctions.find(j => Math.hypot(j.x - snappedX, j.y - snappedY) < 10);
+    if (existing) {
+      return existing;
+    }
+
+    // 5. Append new junction (never overwrite or mutate previous junctions)
+    stateManager.recordHistory();
+
+    const newJunction = {
+      id: `junc-${conn.id}-${Date.now()}-${conn.junctions.length + 1}`,
+      x: snappedX,
+      y: snappedY
+    };
+
+    conn.junctions.push(newJunction);
+
+    stateManager.notify("connections");
+    return newJunction;
   }
 
-  /**
-   * Proteus-Style: Cut wire mid-way and preserve as hanging wire
-   */
-  cutWireAtPoint(cutX, cutY) {
-    if (!this.isConnecting || !this.sourceTerminal) return;
-
-    const state = stateManager.getState();
-    const cutPoint = { x: Math.round(cutX), y: Math.round(cutY) };
-
-    if (this.sourceHangingWire) {
-      stateManager.recordHistory();
-      this.sourceHangingWire.to = { isHanging: true, point: cutPoint };
-      this.sourceHangingWire.waypoints = this.waypoints.length > 0 ? [...this.waypoints] : null;
-      this.sourceHangingWire = null;
-      stateManager.notify("connections");
-    } else {
-      const id = `conn-${String(connectionCounter++).padStart(3, "0")}`;
-      const newConn = {
-        id,
-        from: { componentId: this.sourceTerminal.componentId, terminalId: this.sourceTerminal.terminalId },
-        to: { isHanging: true, point: cutPoint },
-        color: "#f88c00",
-        waypoints: this.waypoints.length > 0 ? [...this.waypoints] : null
-      };
-
-      stateManager.recordHistory();
-      state.connections.push(newConn);
-      stateManager.notify("connections");
+  startConnectingFromJunction(conn, junc) {
+    if (this.isConnecting) {
+      // If already connecting, connect to this junction
+      this.createConnection(
+        this.sourceTerminal.isHanging ? this.sourceTerminal : { componentId: this.sourceTerminal.componentId, terminalId: this.sourceTerminal.terminalId },
+        {
+          componentId: conn.from?.componentId || conn.id,
+          terminalId: conn.from?.terminalId || "junction",
+          isWireBranch: true,
+          targetWireId: conn.id,
+          junctionPoint: { x: junc.x, y: junc.y }
+        },
+        [...this.waypoints]
+      );
+      this.cancelConnecting();
+      return;
     }
 
-    this.cancelConnecting();
+    this.isConnecting = true;
+    this.isDraggingWire = true;
+    this.dragHasMoved = false;
+
+    this.sourceHangingWire = null;
+    this.sourceTerminal = {
+      isWireBranch: true,
+      targetWireId: conn.id,
+      junctionPoint: { x: junc.x, y: junc.y },
+      worldX: junc.x,
+      worldY: junc.y
+    };
+    this.waypoints = [];
+    this.snapTarget = null;
+    this.hoveredTerminal = null;
+
+    if (this.wirePreview) {
+      this.wirePreview.style.display = "block";
+      this.currentMousePos = { x: junc.x, y: junc.y };
+      this.drawWirePreview();
+    }
+    this.updateCancelButtonUI(true);
   }
 
   finishJunctionConnection(targetConn, clickPos) {
@@ -921,7 +961,11 @@ export class ConnectionEngine {
     // If continuing an existing hanging wire:
     if (this.sourceHangingWire) {
       stateManager.recordHistory();
-      this.sourceHangingWire.to = to;
+      if (this.sourceTerminal?.isHangingStart) {
+        this.sourceHangingWire.from = to;
+      } else {
+        this.sourceHangingWire.to = to;
+      }
       this.sourceHangingWire.waypoints = waypoints.length > 0 ? waypoints : null;
       const wireId = this.sourceHangingWire.id;
       this.sourceHangingWire = null;
@@ -1004,31 +1048,7 @@ export class ConnectionEngine {
   }
 
   getTerminalWorldPosition(compId, termId) {
-    const state = stateManager.getState();
-    const comp = state.components.find(c => c.id === compId);
-    if (!comp) return null;
-
-    const term = comp.terminals.find(t => t.id === termId);
-    if (!term) return null;
-
-    const rotation = comp.rotation || 0;
-    const cx = comp.width / 2;
-    const cy = comp.height / 2;
-
-    const dx = term.relX - cx;
-    const dy = term.relY - cy;
-
-    const rad = (rotation * Math.PI) / 180;
-    const cos = Math.cos(rad);
-    const sin = Math.sin(rad);
-
-    const rotX = dx * cos - dy * sin;
-    const rotY = dx * sin + dy * cos;
-
-    return {
-      x: Math.round(comp.x + cx + rotX),
-      y: Math.round(comp.y + cy + rotY)
-    };
+    return getTerminalWorldPosition(compId, termId);
   }
 
   computeFlexibleCablePath(p1, p2) {
@@ -1122,19 +1142,15 @@ export class ConnectionEngine {
 
       this.bindDirectWireDrag(path, conn, p1, p2);
 
-      // Handler untuk memutus / menghapus kabel
-      const handleDisconnect = (e) => {
-        if (e) {
-          e.stopPropagation();
-          if (e.cancelable) e.preventDefault();
-        }
-        this.deleteConnection(conn.id);
-      };
+      // 1. Desktop: double-click adds persistent junction
+      path.addEventListener("dblclick", (e) => {
+        e.stopPropagation();
+        if (e.cancelable) e.preventDefault();
+        const pos = this.workspace.screenToCanvas(e.clientX, e.clientY);
+        this.addWireJunction(conn, pos.x, pos.y);
+      });
 
-      // 1. Desktop: event dblclick
-      path.addEventListener("dblclick", handleDisconnect);
-
-      // 2. iOS Safari: Cegah double-tap to zoom pada touchstart ke-2
+      // 2. iOS Safari: prevent double-tap to zoom
       let lastTouchStartTime = 0;
       path.addEventListener("touchstart", (e) => {
         const now = Date.now();
@@ -1144,72 +1160,67 @@ export class ConnectionEngine {
         lastTouchStartTime = now;
       }, { passive: false });
 
-      // 3. Mobile Touchscreen: Deteksi double-tap manual via touchend (< 300ms)
+      // 3. Mobile Touchscreen: double-tap (< 350ms) adds persistent junction
       let lastWireTap = 0;
+      let lastWireTapPos = { x: 0, y: 0 };
       path.addEventListener("touchend", (e) => {
         const currentTime = Date.now();
         const tapGap = currentTime - lastWireTap;
-        if (tapGap < 300 && tapGap > 0) {
-          if (e.cancelable) e.preventDefault();
-          handleDisconnect(e);
+        const touch = e.changedTouches && e.changedTouches[0] ? e.changedTouches[0] : null;
+        if (touch && tapGap < 350 && tapGap > 0) {
+          const dist = Math.hypot(touch.clientX - lastWireTapPos.x, touch.clientY - lastWireTapPos.y);
+          if (dist < 40) {
+            if (e.cancelable) e.preventDefault();
+            e.stopPropagation();
+            const pos = this.workspace.screenToCanvas(touch.clientX, touch.clientY);
+            this.addWireJunction(conn, pos.x, pos.y);
+            lastWireTap = 0;
+            return;
+          }
+        }
+        if (touch) {
+          lastWireTapPos = { x: touch.clientX, y: touch.clientY };
         }
         lastWireTap = currentTime;
       }, { passive: false });
 
       this.wiresGroup.appendChild(path);
 
-      // Render solid metallic terminal plugs at connection endpoints
-      if (!conn.from.isWireBranch && !conn.from.isHanging) {
-        const plugFrom = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-        plugFrom.setAttribute("cx", p1.x);
-        plugFrom.setAttribute("cy", p1.y);
-        plugFrom.setAttribute("r", "5");
-        plugFrom.setAttribute("class", "wire-terminal-plug");
-        this.wiresGroup.appendChild(plugFrom);
-      }
-
-      if (!conn.to.isWireBranch && !conn.to.isHanging) {
-        const plugTo = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-        plugTo.setAttribute("cx", p2.x);
-        plugTo.setAttribute("cy", p2.y);
-        plugTo.setAttribute("r", "5");
-        plugTo.setAttribute("class", "wire-terminal-plug");
-        this.wiresGroup.appendChild(plugTo);
-      }
-
-      // Render Cut / Hanging Wire Endpoint Node
-      if (conn.to?.isHanging) {
-        const hangingNode = document.createElement("div");
-        hangingNode.className = "hanging-wire-node";
-        hangingNode.id = `hanging-node-${conn.id}`;
-        hangingNode.setAttribute("data-conn-id", conn.id);
-        hangingNode.style.left = `${p2.x}px`;
-        hangingNode.style.top = `${p2.y}px`;
-        hangingNode.title = "Ujung kabel terputus (Klik / Tap untuk melanjutkan penyambungan)";
-
-        if (this.sourceHangingWire && this.sourceHangingWire.id === conn.id) {
-          hangingNode.classList.add("connecting-source");
-        }
-
-        const onHangingTouchStart = (e) => {
-          e.stopPropagation();
-          if (e.cancelable) e.preventDefault();
-          this.handleHangingNodeClick(conn, p2, hangingNode, e);
-        };
-
-        const onHangingPointerDown = (e) => {
-          if (e.pointerType === "touch") return; // Handled by touchstart
-          e.stopPropagation();
-          if (e.cancelable) e.preventDefault();
-          this.handleHangingNodeClick(conn, p2, hangingNode, e);
-        };
-
-        hangingNode.addEventListener("touchstart", onHangingTouchStart, { passive: false });
-        hangingNode.addEventListener("pointerdown", onHangingPointerDown, { passive: false });
-        
+      // Render all persistent junctions for this connection
+      if (Array.isArray(conn.junctions) && conn.junctions.length > 0) {
         const compLayer = document.getElementById("components-layer");
-        if (compLayer) compLayer.appendChild(hangingNode);
+        conn.junctions.forEach((junc) => {
+          const juncNode = document.createElement("div");
+          juncNode.className = "wire-junction-node";
+          juncNode.id = `junction-node-${junc.id}`;
+          juncNode.setAttribute("data-conn-id", conn.id);
+          juncNode.setAttribute("data-junc-id", junc.id);
+          juncNode.style.left = `${junc.x}px`;
+          juncNode.style.top = `${junc.y}px`;
+          juncNode.title = "Titik Percabangan / Junction (Klik / Tap untuk menarik cabang kabel)";
+
+          const dotEl = document.createElement("div");
+          dotEl.className = "wire-junction-dot";
+          juncNode.appendChild(dotEl);
+
+          // Click / Tap to start routing a branch wire from this junction
+          const onJuncClick = (e) => {
+            e.stopPropagation();
+            if (e.cancelable) e.preventDefault();
+            this.startConnectingFromJunction(conn, junc);
+          };
+
+          juncNode.addEventListener("touchstart", onJuncClick, { passive: false });
+          juncNode.addEventListener("pointerdown", (e) => {
+            if (e.pointerType === "touch") return;
+            onJuncClick(e);
+          });
+
+          if (compLayer) compLayer.appendChild(juncNode);
+        });
       }
+
+
 
       if (state.selection.type === "connection" && state.selection.id === conn.id) {
         this.renderOrthogonalHandles(conn, p1, p2);
@@ -1228,56 +1239,60 @@ export class ConnectionEngine {
     });
   }
 
-
-
   renderOrthogonalHandles(conn, p1, p2) {
-    const midX = conn.waypoints && conn.waypoints[0] ? conn.waypoints[0].x : (p1.x + p2.x) / 2;
-    const midY = conn.waypoints && conn.waypoints[0] ? conn.waypoints[0].y : (p1.y + p2.y) / 2;
+    if (!conn.waypoints || conn.waypoints.length === 0) return;
+    
+    // Only render handles for explicit user manual waypoints (auto-bends are derived)
+    const manualWaypoints = conn.waypoints.filter(wp => wp.isManual);
+    if (manualWaypoints.length === 0) return;
 
-    const handle = document.createElement("div");
-    handle.className = "wire-handle orthogonal-handle";
-    handle.style.left = `${midX}px`;
-    handle.style.top = `${midY}px`;
-    handle.title = "Tarik untuk memindahkan jalur kabel (Terminal tetap tersambung)";
+    manualWaypoints.forEach((wp) => {
+      const handle = document.createElement("div");
+      handle.className = "wire-handle orthogonal-handle";
+      handle.style.left = `${wp.x}px`;
+      handle.style.top = `${wp.y}px`;
+      handle.title = "Tarik untuk memindahkan waypoint kabel";
 
-    let startX = 0, startY = 0;
-    let initX = midX, initY = midY;
+      let startX = 0, startY = 0;
+      let initX = wp.x, initY = wp.y;
 
-    handle.addEventListener("pointerdown", (e) => {
-      e.stopPropagation();
-      startX = e.clientX;
-      startY = e.clientY;
-      initX = midX;
-      initY = midY;
+      handle.addEventListener("pointerdown", (e) => {
+        e.stopPropagation();
+        startX = e.clientX;
+        startY = e.clientY;
+        initX = wp.x;
+        initY = wp.y;
 
-      const onMove = (mv) => {
-        const dx = (mv.clientX - startX) / this.workspace.zoom;
-        const dy = (mv.clientY - startY) / this.workspace.zoom;
-        const newX = Math.round(initX + dx);
-        const newY = Math.round(initY + dy);
+        const onMove = (mv) => {
+          const dx = (mv.clientX - startX) / this.workspace.zoom;
+          const dy = (mv.clientY - startY) / this.workspace.zoom;
+          const newX = Math.round(initX + dx);
+          const newY = Math.round(initY + dy);
 
-        conn.waypoints = [{ x: newX, y: newY }];
-        handle.style.left = `${newX}px`;
-        handle.style.top = `${newY}px`;
+          wp.x = newX;
+          wp.y = newY;
+          handle.style.left = `${newX}px`;
+          handle.style.top = `${newY}px`;
 
-        const path = document.getElementById(`wire-${conn.id}`);
-        if (path) {
-          path.setAttribute("d", this.computeOrthogonalPath(p1, p2, conn.waypoints, conn.from, conn.to));
-        }
-      };
+          const path = document.getElementById(`wire-${conn.id}`);
+          if (path) {
+            path.setAttribute("d", this.computeOrthogonalPath(p1, p2, conn.waypoints, conn.from, conn.to));
+          }
+        };
 
-      const onUp = () => {
-        window.removeEventListener("pointermove", onMove);
-        window.removeEventListener("pointerup", onUp);
-        stateManager.notify("connections");
-      };
+        const onUp = () => {
+          window.removeEventListener("pointermove", onMove);
+          window.removeEventListener("pointerup", onUp);
+          stateManager.notify("connections");
+        };
 
-      window.addEventListener("pointermove", onMove);
-      window.addEventListener("pointerup", onUp);
+        window.addEventListener("pointermove", onMove);
+        window.addEventListener("pointerup", onUp);
+      });
+
+      const compLayer = document.getElementById("components-layer");
+      if (compLayer) compLayer.appendChild(handle);
     });
-
-    const compLayer = document.getElementById("components-layer");
-    if (compLayer) compLayer.appendChild(handle);
   }
 
   bindDirectWireDrag(pathEl, conn, p1, p2) {
@@ -1351,18 +1366,10 @@ export class ConnectionEngine {
     tb.style.top = `${anchor.y - 24}px`;
 
     tb.innerHTML = `
-      <button class="btn-cut-wire" id="btn-cut-wire-at-point" title="Potong kabel di titik ini (bagian sebelum titik potong tetap tersimpan)">
-        <span>✂️</span> Potong Kabel
-      </button>
-      <button class="btn-cut-wire danger" id="btn-delete-wire-action" title="Hapus kabel sepenuhnya">
+      <button class="btn-cut-wire danger" id="btn-delete-wire-action" title="Hapus kabel terpilih (Delete)">
         <span>🗑️</span> Hapus
       </button>
     `;
-
-    tb.querySelector("#btn-cut-wire-at-point")?.addEventListener("click", (e) => {
-      e.stopPropagation();
-      this.splitWireAtPoint(conn, anchor.x, anchor.y);
-    });
 
     tb.querySelector("#btn-delete-wire-action")?.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -1372,17 +1379,6 @@ export class ConnectionEngine {
     const compLayer = document.getElementById("components-layer");
     if (compLayer) compLayer.appendChild(tb);
     this.floatingToolbar = tb;
-  }
-
-  splitWireAtPoint(conn, cutX, cutY) {
-    const cutPoint = { x: Math.round(cutX), y: Math.round(cutY) };
-    stateManager.recordHistory();
-    conn.to = { isHanging: true, point: cutPoint };
-    if (this.floatingToolbar) {
-      this.floatingToolbar.remove();
-      this.floatingToolbar = null;
-    }
-    stateManager.notify("connections");
   }
 
   updateSelectionVisuals() {

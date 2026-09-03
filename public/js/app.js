@@ -36,6 +36,7 @@ class DTEVirtualLabApp {
 
     this.numberingEngine = new SmartNumberingEngine();
     this.numberingEngine.init();
+    window.numberingEngine = this.numberingEngine;
 
     this.simulationEngine = new SimulationEngine();
     this.simulationEngine.init();

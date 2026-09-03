@@ -49,6 +49,9 @@ export class NetlistBuilder {
         if (conn.to?.isWireBranch && conn.to?.targetWireId) {
           uf.union(conn.id, conn.to.targetWireId);
         }
+        if (conn.from?.isWireBranch && conn.from?.targetWireId) {
+          uf.union(conn.id, conn.from.targetWireId);
+        }
       }
       if (!conn.to?.isHanging && conn.from?.componentId && conn.to?.componentId) {
         uf.union(`${conn.from.componentId}:${conn.from.terminalId}`, `${conn.to.componentId}:${conn.to.terminalId}`);

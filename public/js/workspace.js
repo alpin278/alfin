@@ -3,7 +3,7 @@
  * Handles Canvas Pan, Zoom, Infinite Viewport Grid, Screen-to-Canvas Matrix & Grid Snapping
  */
 
-import { stateManager } from "./state.js";
+import { stateManager, getDefaultWorkspaceZoom } from "./state.js";
 
 export class WorkspaceEngine {
   constructor() {
@@ -14,7 +14,7 @@ export class WorkspaceEngine {
 
     this.panX = 0;
     this.panY = 0;
-    this.zoom = (window.innerWidth < 768) ? 0.78 : 1.0;
+    this.zoom = stateManager.getState().workspace?.zoom || getDefaultWorkspaceZoom();
     this.minZoom = 0.25;
     this.maxZoom = 3.0;
     this.gridSize = 20;
@@ -34,11 +34,7 @@ export class WorkspaceEngine {
   }
 
   init() {
-    if (window.innerWidth < 768) {
-      const state = stateManager.getState();
-      state.workspace.zoom = 0.78;
-    }
-
+    this.zoom = stateManager.getState().workspace?.zoom || getDefaultWorkspaceZoom();
     this.bindEvents();
     this.bindControls();
     
@@ -195,7 +191,7 @@ export class WorkspaceEngine {
       btnZoomReset.addEventListener("click", () => {
         this.panX = 0;
         this.panY = 0;
-        this.zoom = 1.0;
+        this.zoom = getDefaultWorkspaceZoom();
         stateManager.resetWorkspace();
         this.renderTransform();
       });
@@ -220,8 +216,14 @@ export class WorkspaceEngine {
     if (!this.canvasLayer) return;
     this.canvasLayer.style.transform = `translate(${this.panX}px, ${this.panY}px) scale(${this.zoom})`;
     
-    // Synchronize infinite background grid scale & offset with 100% viewport coverage
+    // Set inverse zoom CSS custom properties for constant screen-space sizing (CAD-style terminals)
+    const invZoom = 1 / (this.zoom || 1);
+    this.canvasLayer?.style?.setProperty?.("--inv-zoom", invZoom.toFixed(4));
+    this.canvasLayer?.style?.setProperty?.("--workspace-zoom", this.zoom.toFixed(4));
+    
     if (this.container) {
+      this.container.style?.setProperty?.("--inv-zoom", invZoom.toFixed(4));
+      this.container.style?.setProperty?.("--workspace-zoom", this.zoom.toFixed(4));
       const dynamicGridSize = this.gridSize * this.zoom;
       this.container.style.backgroundSize = `${dynamicGridSize}px ${dynamicGridSize}px`;
       this.container.style.backgroundPosition = `${this.panX}px ${this.panY}px`;

@@ -123,6 +123,8 @@ export class SimulationEngine {
           power: circuitResult.power,
           equivalentResistance: 0
         };
+        // Update active loads (Lamps, LEDs, Motors) so conducting components render their visual states
+        this.updateLoadVisuals(components, circuitResult.branchVoltages, circuitResult.branchCurrents, circuitResult.motorResults);
         this.updateMetricsUI(
           circuitResult.terminalVoltage ?? sourceVoltage,
           circuitResult.totalCurrent,
@@ -241,15 +243,31 @@ export class SimulationEngine {
 
       if (comp.type === "lamp") {
         const nominalV = Number(comp.properties?.nominalVoltage || 12);
-        const glowRatio = Math.min(Math.max(compV / nominalV, 0.2), 1.6);
+        const ratedP = Number(comp.properties?.powerRating || 20);
+        
+        // Single Source of Truth: Branch solved power for this specific lamp
+        const solvedP = Math.abs(compV * compI);
 
-        if (compV > 0.5) {
+        // Threshold: P <= 0.005 W is treated as OFF
+        if (solvedP > 0.005 && compV > 0.1) {
+          const powerRatio = Math.min(Math.max(solvedP / ratedP, 0), 2.0);
+          // Gentle visual mapping for educational visibility (dim glow visible at low voltages/powers)
+          const visualIntensity = Math.min(1.5, Math.max(0.15, Math.sqrt(powerRatio)));
+
           compEl.classList.add("lit");
-          compEl.style.setProperty("--glow-intensity", glowRatio.toFixed(2));
+          compEl.style.setProperty("--glow-intensity", visualIntensity.toFixed(2));
           const lampVis = compEl.querySelector(".lamp-visual");
           if (lampVis) {
             lampVis.classList.add("lit");
-            lampVis.style.setProperty("--glow-intensity", glowRatio.toFixed(2));
+            lampVis.style.setProperty("--glow-intensity", visualIntensity.toFixed(2));
+          }
+        } else {
+          compEl.classList.remove("lit");
+          compEl.style.removeProperty("--glow-intensity");
+          const lampVis = compEl.querySelector(".lamp-visual");
+          if (lampVis) {
+            lampVis.classList.remove("lit");
+            lampVis.style.removeProperty("--glow-intensity");
           }
         }
       } else if (comp.type === "led") {
