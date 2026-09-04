@@ -235,16 +235,19 @@
   font-size: 10px;
   font-family: var(--font-mono);
   font-weight: 700;
-  color: #1e293b;
+  color: #0f172a;
   white-space: nowrap;
-  background: rgba(255, 255, 255, 0.95);
-  padding: 0.5px 5px;
-  border-radius: 3px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  background: transparent;
+  border: none;
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none;
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.85);
+  pointer-events: none;
 }
 
 /* --------------------------------------------------------------------------
-   B. REALISTIC LAMP & DYNAMIC GLOW
+   B. REALISTIC LAMP & DYNAMIC GLOW (E10 Incandescent Laboratory Lamp Pass 2)
    -------------------------------------------------------------------------- */
 .lamp-visual {
   width: 100%;
@@ -260,36 +263,185 @@
 .lamp-bulb {
   width: 58px;
   height: 58px;
-  border-radius: 50% 50% 40% 40%;
-  background: radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.98), rgba(241, 245, 249, 0.7) 60%, rgba(203, 213, 225, 0.5) 100%);
-  border: 1.5px solid rgba(148, 163, 184, 0.7);
+  border-radius: 50% 50% 42% 42%;
+  /* True transparent laboratory glass shell: highly transparent center so workspace grid is visible */
+  background: radial-gradient(
+    circle at 38% 34%,
+    rgba(255, 255, 255, 0.22) 0%,
+    rgba(240, 244, 248, 0.05) 32%,
+    rgba(203, 213, 225, 0.08) 62%,
+    rgba(148, 163, 184, 0.26) 86%,
+    rgba(100, 116, 139, 0.44) 100%
+  );
+  border: 1.5px solid rgba(148, 163, 184, 0.55);
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
-  transition: all 0.15s ease;
-  z-index: 2;
+  box-shadow: 
+    0 4px 10px rgba(0, 0, 0, 0.2),
+    inset 0 1.5px 2px rgba(255, 255, 255, 0.7),
+    inset 0 -3px 6px rgba(51, 65, 85, 0.28);
+  transition: all 0.2s ease;
+  z-index: 3;
+  overflow: visible;
+}
+
+/* Internal illumination layer centered on filament */
+.lamp-internal-glow {
+  position: absolute;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.7);
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(254, 240, 138, 0.8) 25%,
+    rgba(245, 158, 11, 0.45) 55%,
+    rgba(217, 119, 6, 0) 100%
+  );
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: none;
+  z-index: 1;
 }
 
 .lamp-filament {
-  width: 20px;
-  height: 18px;
-  border: 2px solid #64748b;
-  border-bottom: none;
-  border-radius: 10px 10px 0 0;
-  position: relative;
-  transition: all 0.15s ease;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  pointer-events: none;
 }
 
+.lamp-filament-svg {
+  width: 58px;
+  height: 58px;
+  display: block;
+  overflow: visible;
+}
+
+/* Glass Specular Highlights */
+.glass-refl-primary {
+  filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.5));
+  transition: stroke 0.2s ease;
+}
+
+.glass-refl-secondary {
+  transition: stroke 0.2s ease;
+}
+
+/* Stem Glass & Lead Wires */
+.stem-glass-tube {
+  transition: fill 0.2s ease, stroke 0.2s ease;
+}
+
+.stem-lead-wire {
+  transition: stroke 0.2s ease;
+}
+
+/* Physical Support Wires */
+.support-wire {
+  transition: stroke 0.2s ease, filter 0.2s ease;
+}
+
+/* Physical Coiled Tungsten Filament */
+.filament-coil {
+  transition: stroke 0.2s ease, filter 0.2s ease;
+}
+
+/* Tapered Glass Neck Connecting Globe to Metal Base */
+.lamp-glass-neck {
+  width: 22px;
+  height: 6px;
+  margin-top: -3px;
+  margin-bottom: -4px;
+  background: linear-gradient(
+    90deg,
+    rgba(100, 116, 139, 0.45) 0%,
+    rgba(203, 213, 225, 0.25) 20%,
+    rgba(255, 255, 255, 0.5) 35%,
+    rgba(226, 232, 240, 0.2) 60%,
+    rgba(100, 116, 139, 0.5) 100%
+  );
+  border-left: 1.5px solid rgba(148, 163, 184, 0.55);
+  border-right: 1.5px solid rgba(148, 163, 184, 0.55);
+  border-radius: 1.5px;
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.55), inset 0 -1px 2px rgba(0, 0, 0, 0.25);
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* Threaded Metal Socket Base */
 .lamp-base {
   width: 28px;
   height: 18px;
-  background: repeating-linear-gradient(180deg, #94a3b8, #94a3b8 3px, #64748b 3px, #64748b 6px);
+  margin-top: -1px;
+  background: linear-gradient(
+    90deg,
+    #475569 0%,
+    #64748b 12%,
+    #94a3b8 28%,
+    #cbd5e1 45%,
+    #f1f5f9 55%,
+    #94a3b8 75%,
+    #475569 92%,
+    #334155 100%
+  );
   border-radius: 0 0 6px 6px;
-  border: 1px solid #475569;
+  border: 1px solid #334155;
+  box-shadow: 
+    0 3px 6px rgba(0, 0, 0, 0.35),
+    inset 0 1.5px 1px rgba(255, 255, 255, 0.6),
+    inset 0 -2px 3px rgba(15, 23, 42, 0.5);
   z-index: 1;
-  margin-top: -5px;
+  position: relative;
+}
+
+.lamp-base-rim {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #64748b 0%, #e2e8f0 50%, #475569 100%);
+  border-radius: 1px 1px 0 0;
+}
+
+.lamp-base-threads {
+  position: absolute;
+  top: 2px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.35) 0px,
+    rgba(255, 255, 255, 0.35) 1px,
+    transparent 1px,
+    transparent 3px,
+    rgba(15, 23, 42, 0.55) 3px,
+    rgba(15, 23, 42, 0.55) 5px
+  );
+  pointer-events: none;
+}
+
+.lamp-base-contact {
+  position: absolute;
+  bottom: -3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 12px;
+  height: 3.5px;
+  background: #0f172a;
+  border-radius: 0 0 3px 3px;
+  border: 1px solid #020617;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.2);
 }
 
 .lamp-leads-container {
@@ -324,21 +476,54 @@
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
 }
 
-.workspace-component.comp-lamp.lit .lamp-bulb,
-.workspace-component.lit .lamp-bulb,
-.lamp-visual.lit .lamp-bulb {
-  background: radial-gradient(circle at 45% 45%, #ffffff 0%, #fef08a 35%, #f59e0b 100%) !important;
-  border-color: #facc15 !important;
-  box-shadow: 0 0 calc(25px + 30px * var(--glow-intensity, 1)) rgba(245, 158, 11, var(--glow-intensity, 0.9)),
-              0 0 calc(50px + 50px * var(--glow-intensity, 1)) rgba(250, 204, 21, var(--glow-intensity, 0.7)),
-              0 0 calc(80px + 80px * var(--glow-intensity, 1)) rgba(253, 224, 71, var(--glow-intensity, 0.5)) !important;
+/* --------------------------------------------------------------------------
+   LIT / POWERED STATE: Realistic Layered Illumination
+   Filament Glow -> Internal Glass Glow -> Controlled Soft Halo
+   -------------------------------------------------------------------------- */
+.workspace-component.comp-lamp.lit .lamp-internal-glow,
+.lamp-visual.lit .lamp-internal-glow {
+  opacity: calc(0.25 + 0.75 * min(var(--glow-intensity, 1), 1));
+  transform: translate(-50%, -50%) scale(calc(0.65 + 0.35 * min(var(--glow-intensity, 1), 1.15)));
 }
 
-.workspace-component.comp-lamp.lit .lamp-filament,
-.workspace-component.lit .lamp-filament,
-.lamp-visual.lit .lamp-filament {
-  border-color: #ffffff !important;
-  box-shadow: 0 0 12px #ffffff, 0 0 24px #fef08a !important;
+.workspace-component.comp-lamp.lit .filament-coil,
+.lamp-visual.lit .filament-coil {
+  stroke: #ffffff !important;
+  /* Concentrated filament emission: white-hot central core + warm yellow center + orange edge */
+  filter: drop-shadow(0 0 calc(1.5px + 1.5px * var(--glow-intensity, 1)) #ffffff)
+          drop-shadow(0 0 calc(3.5px + 3.5px * var(--glow-intensity, 1)) #fef08a)
+          drop-shadow(0 0 calc(7px + 6px * var(--glow-intensity, 1)) #ea580c) !important;
+}
+
+.workspace-component.comp-lamp.lit .support-wire,
+.lamp-visual.lit .support-wire {
+  stroke: #fef08a !important;
+  filter: drop-shadow(0 0 2.5px #ea580c) !important;
+}
+
+.workspace-component.comp-lamp.lit .stem-lead-wire,
+.lamp-visual.lit .stem-lead-wire {
+  stroke: #94a3b8 !important;
+}
+
+.workspace-component.comp-lamp.lit .glass-refl-primary,
+.lamp-visual.lit .glass-refl-primary {
+  stroke: #fffbeb !important;
+  filter: drop-shadow(0 0 1.5px rgba(254, 240, 138, 0.5)) !important;
+}
+
+.workspace-component.comp-lamp.lit .lamp-bulb,
+.lamp-visual.lit .lamp-bulb {
+  /* Retain visible glass envelope boundary with subtle warm rim tint */
+  border-color: rgba(180, 160, 120, calc(0.45 + 0.3 * var(--glow-intensity, 1))) !important;
+  /* Warm outer halo tuned (+15% to +25% at nominal power, soft decay into workspace) */
+  box-shadow: 
+    0 0 calc(8px + 14px * var(--glow-intensity, 1)) rgba(245, 158, 11, calc(0.44 * var(--glow-intensity, 1))),
+    0 0 calc(16px + 22px * var(--glow-intensity, 1)) rgba(250, 204, 21, calc(0.22 * var(--glow-intensity, 1))),
+    0 0 calc(28px + 28px * var(--glow-intensity, 1)) rgba(251, 191, 36, calc(0.12 * var(--glow-intensity, 1))),
+    inset 0 0 calc(6px + 8px * var(--glow-intensity, 1)) rgba(254, 240, 138, calc(0.42 * var(--glow-intensity, 1))),
+    inset 0 1.5px 2px rgba(255, 255, 255, 0.85),
+    inset 0 -2px 4px rgba(71, 85, 105, 0.3) !important;
 }
 
 .lamp-label {
@@ -347,15 +532,19 @@
   font-size: 11px;
   font-family: var(--font-mono);
   font-weight: 700;
-  color: #1e293b;
-  background: rgba(255, 255, 255, 0.95);
-  padding: 1px 6px;
-  border-radius: 4px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  color: #0f172a;
+  white-space: nowrap;
+  background: transparent;
+  border: none;
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none;
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.85);
+  pointer-events: none;
 }
 
 /* --------------------------------------------------------------------------
-   C. REALISTIC BATTERY
+   C. REALISTIC INDUSTRIAL 12V BATTERY PACK
    -------------------------------------------------------------------------- */
 .battery-visual {
   width: 100%;
@@ -365,68 +554,297 @@
   align-items: center;
   justify-content: center;
   pointer-events: none;
+  box-sizing: border-box;
 }
 
-.battery-body {
-  width: 115px;
-  height: 54px;
-  background: linear-gradient(180deg, #1e293b 0%, #0f172a 70%, #020617 100%);
-  border-radius: 8px;
-  border: 2px solid #334155;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+/* Main Industrial Battery Pack Casing (106px x 62px, centered at 70, 40) */
+.battery-casing {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 106px;
+  height: 62px;
+  /* Dark charcoal industrial matte composite plastic with upper-left illumination */
+  background: linear-gradient(145deg, #27272a 0%, #1c1c1f 40%, #0f0f11 100%);
+  border-radius: 6px;
+  border-top: 1.5px solid #52525b;
+  border-left: 1.5px solid #3f3f46;
+  border-right: 1.5px solid #18181b;
+  border-bottom: 1.5px solid #09090b;
+  box-shadow: 
+    0 4px 12px rgba(0, 0, 0, 0.45),
+    inset 0 1px 1px rgba(255, 255, 255, 0.16),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 3px 6px;
+  box-sizing: border-box;
+  z-index: 2;
+}
+
+/* Top Structural Molding & Beveled Seam */
+.battery-casing-header {
+  width: 100%;
+  height: 4px;
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 14px;
-  position: relative;
 }
 
-.battery-stripe {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 22px;
-  width: 14px;
-  background: linear-gradient(180deg, #0284c7, #38bdf8);
+.battery-casing-seam {
+  width: 100%;
+  height: 1.5px;
+  background: linear-gradient(90deg, #18181b 0%, #3f3f46 20%, #71717a 50%, #3f3f46 80%, #18181b 100%);
+  border-radius: 1px;
 }
 
-.battery-pole-neg {
-  font-size: 18px;
-  font-weight: 900;
-  color: #94a3b8;
-  font-family: var(--font-mono);
-}
-
-.battery-center-label {
+/* Recessed Industrial Spec Plate */
+.battery-label-plate {
+  width: 100%;
+  height: 42px;
+  background: linear-gradient(180deg, #09090b 0%, #131316 100%);
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom-color: rgba(255, 255, 255, 0.03);
+  box-shadow: 
+    inset 0 2px 4px rgba(0, 0, 0, 0.75),
+    0 1px 1px rgba(255, 255, 255, 0.04);
   display: flex;
   flex-direction: column;
   align-items: center;
-  z-index: 2;
+  justify-content: space-between;
+  padding: 2.5px 5px;
+  box-sizing: border-box;
+}
+
+.battery-brand-row {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  line-height: 1;
+}
+
+.battery-spec-brand {
+  font-size: 6.5px;
+  font-weight: 700;
+  color: #a1a1aa;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+}
+
+.battery-spec-badge {
+  font-size: 5.5px;
+  font-weight: 700;
+  color: #38bdf8;
+  background: rgba(2, 132, 199, 0.2);
+  border: 0.5px solid rgba(56, 189, 248, 0.4);
+  border-radius: 2px;
+  padding: 0 3px;
+  line-height: 1.2;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+}
+
+.battery-voltage-display {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4px;
+  line-height: 1;
+  margin: 1px 0;
 }
 
 .battery-volt-text {
   font-size: 14px;
   font-weight: 800;
-  color: #f8fafc;
+  color: #ffffff;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+
+.battery-unit-sub {
+  font-size: 7.5px;
+  font-weight: 700;
+  color: #94a3b8;
+  letter-spacing: 0.06em;
   font-family: var(--font-mono);
 }
 
-.battery-type-text {
-  font-size: 8px;
+.battery-spec-footer {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 5.5px;
+  font-family: var(--font-mono);
+  line-height: 1;
+}
+
+.battery-polarity-hint.hint-neg {
+  color: #94a3b8;
+  font-weight: 700;
+}
+
+.battery-spec-chemistry {
+  color: #52525b;
   font-weight: 600;
-  color: #38bdf8;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
 }
 
-.battery-pole-pos {
-  font-size: 18px;
-  font-weight: 900;
-  color: #ef4444;
+.battery-polarity-hint.hint-pos {
+  color: #f87171;
+  font-weight: 700;
+}
+
+/* Bottom Structural Molding & Grip Ridges */
+.battery-casing-footer {
+  width: 100%;
+  height: 4px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+}
+
+.battery-grip-ridge {
+  width: 8px;
+  height: 1.5px;
+  background: #18181b;
+  border-top: 0.5px solid #3f3f46;
+  border-radius: 1px;
+}
+
+/* Corner Notches */
+.battery-corner-notch {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: #18181b;
+}
+.notch-tl { top: -2px; left: 1px; }
+.notch-tr { top: -2px; right: 1px; }
+.notch-bl { bottom: -2px; left: 1px; }
+.notch-br { bottom: -2px; right: 1px; }
+
+/* --------------------------------------------------------------------------
+   Hardware Terminal Lugs & Bushings for Battery DC
+   Left (-) centered exactly on (10, 40)
+   Right (+) centered exactly on (130, 40)
+   -------------------------------------------------------------------------- */
+.battery-visual .battery-terminal-hardware {
+  position: absolute;
+  top: 40px;
+  width: 18px;
+  height: 18px;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.battery-visual .terminal-hardware-neg {
+  left: 10px;
+}
+
+.battery-visual .terminal-hardware-pos {
+  left: 130px;
+}
+
+/* Metal Connecting Bracket reaching into the casing */
+.battery-visual .terminal-bracket {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 7px;
+  background: linear-gradient(180deg, #64748b 0%, #475569 40%, #1e293b 100%);
+  border: 0.5px solid #0f172a;
+  z-index: 1;
+}
+
+.battery-visual .bracket-neg {
+  right: -7px;
+  width: 9px;
+  border-radius: 0 2px 2px 0;
+}
+
+.battery-visual .bracket-pos {
+  left: -7px;
+  width: 9px;
+  border-radius: 2px 0 0 2px;
+}
+
+/* Heavy-duty Industrial Bushing / Collar */
+.battery-visual .terminal-collar {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 2;
+}
+
+.battery-visual .collar-neg {
+  background: radial-gradient(circle at 35% 35%, #475569 0%, #334155 45%, #0f172a 100%);
+  border: 1px solid #020617;
+  box-shadow: 
+    0 2px 5px rgba(0, 0, 0, 0.5),
+    inset 0 1px 1px rgba(255, 255, 255, 0.3),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.4);
+}
+
+.battery-visual .collar-pos {
+  background: radial-gradient(circle at 35% 35%, #ef4444 0%, #dc2626 50%, #991b1b 100%);
+  border: 1px solid #7f1d1d;
+  box-shadow: 
+    0 2px 5px rgba(0, 0, 0, 0.5),
+    inset 0 1px 1px rgba(255, 255, 255, 0.45),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.4);
+}
+
+/* Metallic Contact Pin / Stud at center */
+.battery-visual .terminal-metallic-stud {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #ffffff 0%, #cbd5e1 55%, #64748b 100%);
+  box-shadow: 
+    inset 0 1px 1px #ffffff,
+    0 1px 2px rgba(0, 0, 0, 0.4);
+  border: 0.5px solid #475569;
+}
+
+/* Polarity Marks (+ / -) */
+.battery-visual .battery-polarity-mark {
+  position: absolute;
+  top: -15px;
+  left: 50%;
+  transform: translateX(-50%);
   font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.battery-visual .polarity-neg {
+  color: #cbd5e1;
+}
+
+.battery-visual .polarity-pos {
+  color: #ef4444;
 }
 
 /* --------------------------------------------------------------------------
-   D. REALISTIC LABORATORY ROCKER SWITCH (Saklar Rocker Tactile)
+   D. REALISTIC INDUSTRIAL ROCKER SWITCH (Saklar Rocker Industrial)
    -------------------------------------------------------------------------- */
 .switch-visual {
   width: 100%;
@@ -437,119 +855,268 @@
   justify-content: center;
   cursor: pointer;
   pointer-events: auto;
+  user-select: none;
+  box-sizing: border-box;
 }
 
+/* Main Molded Industrial Housing (96px x 54px centered at 70, 40) */
 .switch-casing {
-  width: 110px;
-  height: 56px;
-  background: linear-gradient(180deg, #334155 0%, #1e293b 60%, #0f172a 100%);
-  border: 2px solid #64748b;
-  border-radius: 10px;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35), inset 0 1px 2px rgba(255, 255, 255, 0.2);
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 96px;
+  height: 54px;
+  /* Dark charcoal industrial matte composite plastic with upper-left illumination */
+  background: linear-gradient(145deg, #27272a 0%, #1c1c1f 45%, #0f0f11 100%);
+  border-radius: 6px;
+  border-top: 1.5px solid #4b5563;
+  border-left: 1.5px solid #374151;
+  border-right: 1.5px solid #111827;
+  border-bottom: 1.5px solid #030712;
+  box-shadow: 
+    0 3px 8px rgba(0, 0, 0, 0.4),
+    inset 0 1px 1px rgba(255, 255, 255, 0.14),
+    inset 0 -1.5px 3px rgba(0, 0, 0, 0.6);
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 10px;
+  justify-content: center;
+  padding: 4px;
+  box-sizing: border-box;
+  z-index: 2;
+}
+
+.switch-housing-bevel {
+  width: 100%;
+  height: 100%;
   position: relative;
-}
-
-.switch-mount-screw {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: radial-gradient(circle, #94a3b8 0%, #475569 100%);
-  border: 1px solid #1e293b;
-  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.6);
-}
-
-.switch-bezel {
-  width: 68px;
-  height: 40px;
-  background-color: #090e17;
-  border: 1.5px solid #020617;
-  border-radius: 6px;
-  padding: 2px;
-  box-shadow: inset 0 3px 6px rgba(0, 0, 0, 0.8);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
+/* Molded Corner Mounting Tabs */
+.switch-corner-tab {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  background: #111827;
+  border-radius: 0.5px;
+}
+.tab-tl { top: 0; left: 0; }
+.tab-tr { top: 0; right: 0; }
+.tab-bl { bottom: 0; left: 0; }
+.tab-br { bottom: 0; right: 0; }
+
+/* Recessed Switch Bezel / Mechanical Tolerance Well */
+.switch-bezel {
+  width: 74px;
+  height: 38px;
+  background: #09090b;
+  border: 1.5px solid #18181b;
+  border-radius: 4px;
+  box-shadow: 
+    inset 0 2px 6px rgba(0, 0, 0, 0.9),
+    0 1px 1px rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Physical Moving Rocker Button with 3D Mechanical Pivot */
 .rocker-button {
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, #1e293b 0%, #334155 50%, #1e293b 100%);
-  border-radius: 4px;
+  border-radius: 3px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 6px;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
-  transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s ease;
-  user-select: none;
+  box-sizing: border-box;
+  transition: transform 0.18s cubic-bezier(0.34, 1.4, 0.64, 1), box-shadow 0.18s ease, background 0.18s ease;
+  position: relative;
+  cursor: pointer;
 }
 
+/* OFF State: O pressed in (-Z), I raised up (+Z) */
 .rocker-button.off {
-  transform: perspective(250px) rotateY(-16deg);
-  box-shadow: -3px 0 6px rgba(0, 0, 0, 0.6);
+  transform: perspective(260px) rotateY(-14deg);
+  background: linear-gradient(90deg, #334155 0%, #1e293b 45%, #0f172a 75%, #09090b 100%);
+  box-shadow: 
+    -2px 0 6px rgba(0, 0, 0, 0.6),
+    inset 1px 0 1px rgba(255, 255, 255, 0.2),
+    inset -1px 0 2px rgba(0, 0, 0, 0.7);
 }
 
+/* ON State: I pressed in (-Z), O raised up (+Z) */
 .rocker-button.on {
-  transform: perspective(250px) rotateY(16deg);
-  box-shadow: 3px 0 6px rgba(0, 0, 0, 0.6);
+  transform: perspective(260px) rotateY(14deg);
+  background: linear-gradient(90deg, #09090b 0%, #0f172a 25%, #1e293b 55%, #334155 100%);
+  box-shadow: 
+    2px 0 6px rgba(0, 0, 0, 0.6),
+    inset -1px 0 1px rgba(255, 255, 255, 0.2),
+    inset 1px 0 2px rgba(0, 0, 0, 0.7);
 }
 
 .rocker-half {
   flex: 1;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 4px;
+  z-index: 2;
 }
 
+/* Standard Rocker Symbols (I = ON, O = OFF) */
 .rocker-symbol {
   font-family: var(--font-mono);
   font-size: 13px;
   font-weight: 900;
+  line-height: 1;
   color: #64748b;
   transition: color 0.15s ease, text-shadow 0.15s ease;
 }
 
-.rocker-half-on .rocker-symbol {
+.rocker-button.on .rocker-half-on .rocker-symbol {
+  color: #ffffff;
+  text-shadow: 0 0 6px rgba(52, 211, 153, 0.7);
+}
+
+.rocker-button.on .rocker-half-off .rocker-symbol {
   color: #475569;
 }
 
-.rocker-button.on .rocker-half-on .rocker-symbol {
-  color: #34d399;
-  text-shadow: 0 0 6px rgba(52, 211, 153, 0.8);
-}
-
 .rocker-button.off .rocker-half-off .rocker-symbol {
-  color: #ef4444;
-  text-shadow: 0 0 6px rgba(239, 68, 68, 0.8);
+  color: #ffffff;
+  text-shadow: 0 0 4px rgba(248, 113, 113, 0.35);
 }
 
-.rocker-neon-dot {
-  width: 5px;
-  height: 5px;
+.rocker-button.off .rocker-half-on .rocker-symbol {
+  color: #475569;
+}
+
+/* Optional Restrained Optical Indicator Dot on ON side */
+.rocker-indicator-dot {
+  width: 4.5px;
+  height: 4.5px;
   border-radius: 50%;
   background-color: #1e293b;
-  border: 1px solid #334155;
+  border: 0.8px solid #334155;
   transition: all 0.15s ease;
 }
 
-.rocker-button.on .rocker-neon-dot {
+.rocker-button.on .rocker-indicator-dot {
   background-color: #10b981;
   border-color: #34d399;
-  box-shadow: 0 0 8px #10b981, 0 0 14px #34d399;
+  box-shadow: 0 0 5px #10b981;
 }
 
-.rocker-divider {
+/* Central Molded Mechanical Pivot Ridge */
+.rocker-pivot-ridge {
   width: 1.5px;
-  height: 70%;
-  background: rgba(0, 0, 0, 0.4);
+  height: 75%;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.6) 0%, rgba(255, 255, 255, 0.15) 50%, rgba(0, 0, 0, 0.6) 100%);
+  border-radius: 0.5px;
 }
 
+/* --------------------------------------------------------------------------
+   Hardware Terminal Lugs & Bushings for Switch
+   Left (Pin 1) centered exactly on (10, 40)
+   Right (Pin 2) centered exactly on (130, 40)
+   -------------------------------------------------------------------------- */
+.switch-visual .switch-terminal-hardware {
+  position: absolute;
+  top: 40px;
+  width: 18px;
+  height: 18px;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.switch-visual .terminal-hardware-1 {
+  left: 10px;
+}
+
+.switch-visual .terminal-hardware-2 {
+  left: 130px;
+}
+
+/* Metal Connecting Bracket reaching into the switch housing */
+.switch-visual .switch-terminal-bracket {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 6px;
+  background: linear-gradient(180deg, #64748b 0%, #475569 40%, #1e293b 100%);
+  border: 0.5px solid #0f172a;
+  z-index: 1;
+}
+
+.switch-visual .bracket-1 {
+  right: -7px;
+  width: 9px;
+  border-radius: 0 2px 2px 0;
+}
+
+.switch-visual .bracket-2 {
+  left: -7px;
+  width: 9px;
+  border-radius: 2px 0 0 2px;
+}
+
+/* Heavy-duty Industrial Bushing / Collar */
+.switch-visual .switch-terminal-collar {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 2;
+  background: radial-gradient(circle at 35% 35%, #475569 0%, #334155 50%, #0f172a 100%);
+  border: 1px solid #020617;
+  box-shadow: 
+    0 2px 4px rgba(0, 0, 0, 0.45),
+    inset 0 1px 1px rgba(255, 255, 255, 0.25),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.5);
+}
+
+/* Metallic Contact Pin / Stud at center */
+.switch-visual .switch-terminal-stud {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #ffffff 0%, #cbd5e1 55%, #64748b 100%);
+  box-shadow: 
+    inset 0 1px 1px #ffffff,
+    0 1px 2px rgba(0, 0, 0, 0.35);
+  border: 0.5px solid #475569;
+}
+
+/* Pin Identification Marks (1 / 2) */
+.switch-visual .switch-pin-mark {
+  position: absolute;
+  top: -16px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 800;
+  color: #94a3b8;
+  line-height: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+/* External Status Label */
 .switch-status-label {
   position: absolute;
   bottom: -20px;
@@ -558,12 +1125,15 @@
   font-size: 11px;
   font-family: var(--font-mono);
   font-weight: 700;
-  color: #1e293b;
-  background: rgba(255, 255, 255, 0.95);
-  padding: 1px 6px;
-  border-radius: 4px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  color: #0f172a;
   white-space: nowrap;
+  background: transparent;
+  border: none;
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none;
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.85);
+  pointer-events: none;
 }
 
 /* --------------------------------------------------------------------------
@@ -1254,7 +1824,9 @@
 }
 
 /* --------------------------------------------------------------------------
-   F. REALISTIC LED (Semi-Realistic 5mm Red Diffused LED)
+   F. REALISTIC LED (5mm Through-Hole LED with Multi-Color Presets)
+   Preserves realistic 5mm epoxy lens, internal electrodes, and optical depth
+   All colors (Red, Yellow, Green, Blue, White) driven via CSS Custom Properties
    -------------------------------------------------------------------------- */
 .led-visual {
   width: 100%;
@@ -1265,9 +1837,187 @@
   align-items: center;
   justify-content: flex-start;
   pointer-events: none;
+
+  /* Default Red Presets */
+  --led-lens-bg: radial-gradient(circle at 40% 30%, rgba(239, 68, 68, 0.72) 0%, rgba(185, 28, 28, 0.85) 45%, rgba(127, 29, 29, 0.95) 80%, #450a0a 100%);
+  --led-lens-border: rgba(153, 27, 27, 0.85);
+  --led-flange-bg: linear-gradient(180deg, #b91c1c 0%, #7f1d1d 65%, #450a0a 100%);
+  --led-flange-border: #581c87;
+  --led-cathode-flat-bg: linear-gradient(90deg, #450a0a 0%, transparent 100%);
+  --led-halo-bg: radial-gradient(circle at 50% 45%, rgba(239, 68, 68, 0.52) 0%, rgba(220, 38, 38, 0.3) 45%, rgba(185, 28, 28, 0.1) 70%, transparent 88%);
+  --led-core-bg: radial-gradient(circle at center, #ffffff 0%, rgba(254, 202, 202, 0.96) 25%, rgba(239, 68, 68, 0.8) 60%, transparent 100%);
+  --led-core-shadow: rgba(239, 68, 68, 0.9);
+  --led-lit-dome-bg: radial-gradient(circle at 50% 50%, #ffffff 0%, #fecaca 16%, #ef4444 55%, #b91c1c 85%, #7f1d1d 100%);
+  --led-lit-dome-border: #fca5a5;
+  --led-lit-dome-glow: rgba(239, 68, 68, 0.85);
+  --led-die-shadow: #f87171;
+  --led-die-border: #fef08a;
 }
 
-.led-casing {
+/* Color Presets */
+.led-visual.led-color-red {
+  --led-lens-bg: radial-gradient(circle at 40% 30%, rgba(239, 68, 68, 0.72) 0%, rgba(185, 28, 28, 0.85) 45%, rgba(127, 29, 29, 0.95) 80%, #450a0a 100%);
+  --led-lens-border: rgba(153, 27, 27, 0.85);
+  --led-flange-bg: linear-gradient(180deg, #b91c1c 0%, #7f1d1d 65%, #450a0a 100%);
+  --led-flange-border: #581c87;
+  --led-cathode-flat-bg: linear-gradient(90deg, #450a0a 0%, transparent 100%);
+  --led-halo-bg: radial-gradient(circle at 50% 45%, rgba(239, 68, 68, 0.52) 0%, rgba(220, 38, 38, 0.3) 45%, rgba(185, 28, 28, 0.1) 70%, transparent 88%);
+  --led-core-bg: radial-gradient(circle at center, #ffffff 0%, rgba(254, 202, 202, 0.96) 25%, rgba(239, 68, 68, 0.8) 60%, transparent 100%);
+  --led-core-shadow: rgba(239, 68, 68, 0.9);
+  --led-lit-dome-bg: radial-gradient(circle at 50% 50%, #ffffff 0%, #fecaca 16%, #ef4444 55%, #b91c1c 85%, #7f1d1d 100%);
+  --led-lit-dome-border: #fca5a5;
+  --led-lit-dome-glow: rgba(239, 68, 68, 0.85);
+  --led-die-shadow: #f87171;
+  --led-die-border: #fef08a;
+}
+
+.led-visual.led-color-yellow {
+  --led-lens-bg: radial-gradient(circle at 40% 30%, rgba(250, 204, 21, 0.75) 0%, rgba(234, 179, 8, 0.85) 45%, rgba(161, 98, 7, 0.95) 80%, #713f12 100%);
+  --led-lens-border: rgba(202, 138, 4, 0.85);
+  --led-flange-bg: linear-gradient(180deg, #ca8a04 0%, #a16207 65%, #713f12 100%);
+  --led-flange-border: #713f12;
+  --led-cathode-flat-bg: linear-gradient(90deg, #713f12 0%, transparent 100%);
+  --led-halo-bg: radial-gradient(circle at 50% 45%, rgba(250, 204, 21, 0.55) 0%, rgba(234, 179, 8, 0.35) 45%, rgba(161, 98, 7, 0.12) 70%, transparent 88%);
+  --led-core-bg: radial-gradient(circle at center, #ffffff 0%, rgba(254, 240, 138, 0.96) 25%, rgba(234, 179, 8, 0.85) 60%, transparent 100%);
+  --led-core-shadow: rgba(234, 179, 8, 0.95);
+  --led-lit-dome-bg: radial-gradient(circle at 50% 50%, #ffffff 0%, #fef08a 16%, #facc15 55%, #ca8a04 85%, #854d0e 100%);
+  --led-lit-dome-border: #fef08a;
+  --led-lit-dome-glow: rgba(234, 179, 8, 0.85);
+  --led-die-shadow: #fde047;
+  --led-die-border: #fef08a;
+}
+
+.led-visual.led-color-green {
+  --led-lens-bg: radial-gradient(circle at 40% 30%, rgba(34, 197, 94, 0.72) 0%, rgba(22, 163, 74, 0.85) 45%, rgba(21, 128, 61, 0.95) 80%, #052e16 100%);
+  --led-lens-border: rgba(22, 101, 52, 0.85);
+  --led-flange-bg: linear-gradient(180deg, #16a34a 0%, #15803d 65%, #052e16 100%);
+  --led-flange-border: #052e16;
+  --led-cathode-flat-bg: linear-gradient(90deg, #052e16 0%, transparent 100%);
+  --led-halo-bg: radial-gradient(circle at 50% 45%, rgba(34, 197, 94, 0.52) 0%, rgba(22, 163, 74, 0.3) 45%, rgba(21, 128, 61, 0.1) 70%, transparent 88%);
+  --led-core-bg: radial-gradient(circle at center, #ffffff 0%, rgba(187, 247, 208, 0.96) 25%, rgba(34, 197, 94, 0.85) 60%, transparent 100%);
+  --led-core-shadow: rgba(34, 197, 94, 0.9);
+  --led-lit-dome-bg: radial-gradient(circle at 50% 50%, #ffffff 0%, #bbf7d0 16%, #22c55e 55%, #16a34a 85%, #14532d 100%);
+  --led-lit-dome-border: #86efac;
+  --led-lit-dome-glow: rgba(34, 197, 94, 0.85);
+  --led-die-shadow: #4ade80;
+  --led-die-border: #bbf7d0;
+}
+
+.led-visual.led-color-blue {
+  --led-lens-bg: radial-gradient(circle at 40% 30%, rgba(56, 189, 248, 0.72) 0%, rgba(14, 165, 233, 0.85) 45%, rgba(2, 132, 199, 0.95) 80%, #082f49 100%);
+  --led-lens-border: rgba(3, 105, 161, 0.85);
+  --led-flange-bg: linear-gradient(180deg, #0284c7 0%, #0369a1 65%, #082f49 100%);
+  --led-flange-border: #082f49;
+  --led-cathode-flat-bg: linear-gradient(90deg, #082f49 0%, transparent 100%);
+  --led-halo-bg: radial-gradient(circle at 50% 45%, rgba(56, 189, 248, 0.55) 0%, rgba(14, 165, 233, 0.32) 45%, rgba(2, 132, 199, 0.12) 70%, transparent 88%);
+  --led-core-bg: radial-gradient(circle at center, #ffffff 0%, rgba(186, 230, 253, 0.96) 25%, rgba(56, 189, 248, 0.85) 60%, transparent 100%);
+  --led-core-shadow: rgba(14, 165, 233, 0.95);
+  --led-lit-dome-bg: radial-gradient(circle at 50% 50%, #ffffff 0%, #bae6fd 16%, #38bdf8 55%, #0284c7 85%, #0c4a6e 100%);
+  --led-lit-dome-border: #7dd3fc;
+  --led-lit-dome-glow: rgba(14, 165, 233, 0.85);
+  --led-die-shadow: #38bdf8;
+  --led-die-border: #bae6fd;
+}
+
+.led-visual.led-color-white {
+  --led-lens-bg: radial-gradient(circle at 40% 30%, rgba(248, 250, 252, 0.55) 0%, rgba(203, 213, 225, 0.65) 45%, rgba(148, 163, 184, 0.75) 80%, #334155 100%);
+  --led-lens-border: rgba(148, 163, 184, 0.65);
+  --led-flange-bg: linear-gradient(180deg, #94a3b8 0%, #64748b 65%, #334155 100%);
+  --led-flange-border: #1e293b;
+  --led-cathode-flat-bg: linear-gradient(90deg, #334155 0%, transparent 100%);
+  --led-halo-bg: radial-gradient(circle at 50% 45%, rgba(255, 255, 255, 0.65) 0%, rgba(226, 232, 240, 0.35) 45%, rgba(148, 163, 184, 0.12) 70%, transparent 88%);
+  --led-core-bg: radial-gradient(circle at center, #ffffff 0%, rgba(255, 255, 255, 0.98) 30%, rgba(241, 245, 249, 0.85) 60%, transparent 100%);
+  --led-core-shadow: rgba(255, 255, 255, 0.95);
+  --led-lit-dome-bg: radial-gradient(circle at 50% 50%, #ffffff 0%, #f8fafc 20%, #e2e8f0 55%, #cbd5e1 85%, #94a3b8 100%);
+  --led-lit-dome-border: #ffffff;
+  --led-lit-dome-glow: rgba(255, 255, 255, 0.9);
+  --led-die-shadow: #f8fafc;
+  --led-die-border: #ffffff;
+}
+
+/* Restrained Outer Emission Halo (Illuminates subtly around the dome when ON) */
+.led-visual .led-glow-halo {
+  position: absolute;
+  top: 3px;
+  left: 17px;
+  width: 46px;
+  height: 50px;
+  border-radius: 23px 23px 12px 12px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 0;
+}
+
+.workspace-component.comp-led.lit .led-visual .led-glow-halo,
+.workspace-component.comp-led.lit .led-glow-halo,
+.led-visual.lit .led-glow-halo {
+  opacity: var(--led-intensity, 1);
+  background: var(--led-halo-bg);
+  filter: blur(5px);
+  transform: scale(calc(0.9 + 0.18 * var(--led-intensity, 1)));
+}
+
+/* Metal Through-Hole Leads (Directly aligned with locked terminals: Anode (20, 60) and Cathode (60, 60)) */
+.led-visual .led-leads-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.led-visual .led-lead-leg {
+  position: absolute;
+  top: 48px;
+  transform: translateX(-50%);
+  width: 10px;
+  height: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.led-visual .led-lead-leg.led-lead-cathode {
+  left: 20px;
+}
+
+.led-visual .led-lead-leg.led-lead-anode {
+  left: 60px;
+}
+
+.led-visual .led-lead-standoff {
+  width: 4px;
+  height: 2.5px;
+  background: linear-gradient(90deg, #475569 0%, #cbd5e1 50%, #475569 100%);
+  border-radius: 0.5px;
+  box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.4);
+}
+
+.led-visual .led-lead-pin {
+  width: 2.5px;
+  height: 11px;
+  background: linear-gradient(90deg, #64748b 0%, #cbd5e1 45%, #f1f5f9 65%, #475569 100%);
+  border-radius: 0.5px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+  position: relative;
+}
+
+.led-visual .led-lead-stud {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 3.5px;
+  height: 3px;
+  background: radial-gradient(circle at 35% 35%, #94a3b8 0%, #334155 100%);
+  border-radius: 50%;
+}
+
+/* 5mm LED Casing (Epoxy Dome + Base Flange) */
+.led-visual .led-casing {
   position: absolute;
   top: 6px;
   left: 50%;
@@ -1278,123 +2028,348 @@
   z-index: 3;
 }
 
-.led-dome {
-  width: 38px;
-  height: 46px;
-  border-radius: 19px 19px 3px 3px;
-  background: radial-gradient(circle at 35% 28%, #ef4444 0%, #dc2626 40%, #991b1b 75%, #7f1d1d 100%);
-  border: 1.5px solid #7f1d1d;
+/* Rounded Epoxy Dome (32px x 40px, rounded dome top, cylindrical lower body) */
+.led-visual .led-dome {
+  width: 32px;
+  height: 40px;
+  border-radius: 16px 16px 2px 2px;
+  background: var(--led-lens-bg);
+  border: 1px solid var(--led-lens-border);
   position: relative;
   box-shadow: 
-    0 4px 10px -2px rgba(0, 0, 0, 0.45),
-    inset 0 2px 4px rgba(255, 255, 255, 0.4),
-    inset 0 -2px 4px rgba(0, 0, 0, 0.3);
+    0 4px 10px rgba(0, 0, 0, 0.45),
+    inset 0 2px 4px rgba(255, 255, 255, 0.35),
+    inset 0 -3px 6px rgba(0, 0, 0, 0.5);
   overflow: hidden;
-  transition: all 0.15s ease;
+  transition: all 0.18s ease;
 }
 
-.led-specular-highlight {
+/* Internal Active Emission Core (Point source originating inside the die) */
+.led-visual .led-internal-emission {
   position: absolute;
-  top: 4px;
-  left: 6px;
-  width: 12px;
-  height: 16px;
+  top: 22px;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
-  background: radial-gradient(circle at 40% 40%, rgba(255, 255, 255, 0.75) 0%, rgba(255, 255, 255, 0) 75%);
-  transform: rotate(-20deg);
   pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+  z-index: 2;
 }
 
-.led-die-core {
+.workspace-component.comp-led.lit .led-visual .led-internal-emission,
+.workspace-component.comp-led.lit .led-internal-emission,
+.led-visual.lit .led-internal-emission {
+  opacity: var(--led-intensity, 1);
+  background: var(--led-core-bg);
+  box-shadow: 0 0 calc(12px * var(--led-intensity, 1)) var(--led-core-shadow);
+}
+
+/* ON State: Epoxy Illumination */
+.workspace-component.comp-led.lit .led-visual .led-dome,
+.workspace-component.comp-led.lit .led-dome,
+.led-visual.lit .led-dome {
+  background: var(--led-lit-dome-bg) !important;
+  border-color: var(--led-lit-dome-border) !important;
+  box-shadow: 
+    0 0 calc(10px * var(--led-intensity, 1)) var(--led-lit-dome-glow),
+    inset 0 0 calc(8px * var(--led-intensity, 1)) rgba(255, 255, 255, 0.78) !important;
+}
+
+/* Internal LED Structure (Cathode anvil, anode post, micro-die & bond wire) */
+.led-visual .led-internal-assembly {
   position: absolute;
-  bottom: 8px;
+  bottom: 4px;
   left: 50%;
   transform: translateX(-50%);
-  width: 18px;
-  height: 14px;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  opacity: 0.35;
+  width: 24px;
+  height: 26px;
   pointer-events: none;
-}
-
-.led-post {
-  width: 3px;
-  height: 12px;
-  background: #450a0a;
-  border-radius: 1px;
-}
-
-.led-anvil {
-  width: 8px;
-  height: 10px;
-  background: #450a0a;
-  clip-path: polygon(0 0, 100% 40%, 100% 100%, 0 100%);
-}
-
-.led-flange {
-  width: 42px;
-  height: 5px;
-  background: linear-gradient(180deg, #dc2626 0%, #991b1b 100%);
-  border-radius: 2px;
-  border: 1px solid #7f1d1d;
-  margin-top: -1px;
-}
-
-.led-leads-container {
-  position: absolute;
-  top: 51px;
-  left: 0;
-  right: 0;
-  height: 10px;
   z-index: 1;
 }
 
-.led-lead-anode {
+/* Cathode Anvil Electrode (Left, wider leadframe with reflector cup) */
+.led-visual .led-anvil-electrode {
   position: absolute;
-  left: 19px;
-  top: 0;
+  left: 2px;
+  bottom: 0;
+  width: 10px;
+  height: 20px;
+  clip-path: polygon(0% 0%, 65% 0%, 100% 28%, 100% 100%, 0% 100%);
+  background: linear-gradient(135deg, #cbd5e1 0%, #94a3b8 40%, #64748b 80%, #334155 100%);
+  opacity: 0.7;
+  position: relative;
+}
+
+.led-visual .led-reflector-cup {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 6px;
+  height: 4px;
+  border-radius: 0 0 3px 3px;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.led-visual .led-chip-die {
+  position: absolute;
+  top: 2px;
+  right: 2px;
   width: 2.5px;
-  height: 10px;
-  background: linear-gradient(180deg, #f8fafc 0%, #cbd5e1 35%, #94a3b8 70%, #64748b 100%);
-  border-radius: 1px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  height: 2.5px;
+  background: #581c87;
+  border: 0.5px solid #3b0764;
+  border-radius: 0.5px;
+  transition: all 0.15s ease;
 }
 
-.led-lead-cathode {
+.workspace-component.comp-led.lit .led-visual .led-chip-die,
+.workspace-component.comp-led.lit .led-chip-die,
+.led-visual.lit .led-chip-die {
+  background: #ffffff !important;
+  box-shadow: 0 0 4px #ffffff, 0 0 8px var(--led-die-shadow) !important;
+  border-color: var(--led-die-border) !important;
+  transform: scale(1.3);
+}
+
+/* Anode Post Electrode (Right, slender metallic lead) */
+.led-visual .led-post-electrode {
   position: absolute;
-  left: 59px;
-  top: 0;
+  right: 3px;
+  bottom: 0;
   width: 2.5px;
-  height: 10px;
-  background: linear-gradient(180deg, #f8fafc 0%, #cbd5e1 35%, #94a3b8 70%, #64748b 100%);
-  border-radius: 1px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  height: 18px;
+  background: linear-gradient(90deg, #64748b 0%, #cbd5e1 45%, #f1f5f9 65%, #475569 100%);
+  border-radius: 0.5px;
+  opacity: 0.65;
+  box-shadow: 0 0 1px rgba(0, 0, 0, 0.5);
 }
 
-.workspace-component.comp-led.lit .led-dome,
-.led-visual.lit .led-dome {
-  background: radial-gradient(circle at 45% 40%, #ffffff 0%, #fecaca 20%, #ef4444 60%, #b91c1c 100%) !important;
-  border-color: #f87171 !important;
-  box-shadow: 
-    0 0 calc(10px + 10px * var(--glow-intensity, 1)) rgba(239, 68, 68, 0.75),
-    0 0 4px rgba(255, 255, 255, 0.8),
-    inset 0 2px 4px rgba(255, 255, 255, 0.8) !important;
-}
-
-.led-label {
+.led-visual .led-bond-wire {
   position: absolute;
-  bottom: -20px;
+  top: 3px;
+  right: 4px;
+  width: 10px;
+  height: 7px;
+  border: 0.8px solid #fbbf24;
+  border-color: #fbbf24 transparent transparent transparent;
+  border-radius: 50%/3px 3px 0 0;
+  opacity: 0.75;
+}
+
+/* Translucent Epoxy Lens Shading */
+.led-visual .led-lens-shading {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.15) 0%, transparent 35%, rgba(0, 0, 0, 0.25) 85%, rgba(0, 0, 0, 0.45) 100%);
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* 3D Specular Curved Highlights */
+.led-visual .led-specular-primary {
+  position: absolute;
+  top: 4px;
+  left: 5px;
+  width: 9px;
+  height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0) 75%);
+  transform: rotate(-25deg);
+  pointer-events: none;
+  z-index: 4;
+}
+
+.led-visual .led-specular-secondary {
+  position: absolute;
+  bottom: 8px;
+  right: 4px;
+  width: 4px;
+  height: 12px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.25) 50%, rgba(255, 255, 255, 0) 100%);
+  pointer-events: none;
+  z-index: 4;
+}
+
+/* Base Flange Lip with Flat Cathode Indicator on Left */
+.led-visual .led-flange {
+  width: 36px;
+  height: 4.5px;
+  background: var(--led-flange-bg);
+  border-radius: 2px;
+  border: 0.8px solid var(--led-flange-border);
+  margin-top: -1px;
+  position: relative;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
+}
+
+.led-visual .led-cathode-flat {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--led-cathode-flat-bg);
+  border-right: 0.5px solid rgba(255, 255, 255, 0.15);
+}
+
+/* Polarity Indicators */
+.led-visual .led-polarity-mark {
+  position: absolute;
+  font-family: var(--font-mono);
+  font-weight: 800;
   font-size: 11px;
+  user-select: none;
+  pointer-events: none;
+}
+
+.led-visual .led-polarity-cathode {
+  left: 9px;
+  top: 50px;
+  color: #94a3b8;
+  opacity: 0.85;
+}
+
+.led-visual .led-polarity-anode {
+  right: 9px;
+  top: 50px;
+  color: #ef4444;
+  opacity: 0.85;
+}
+
+/* Specification Label */
+.led-visual .led-label {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
   font-family: var(--font-mono);
   font-weight: 700;
-  color: #1e293b;
-  background: rgba(255, 255, 255, 0.95);
-  padding: 1px 6px;
-  border-radius: 4px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  color: #0f172a;
   white-space: nowrap;
+  background: transparent;
+  border: none;
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none;
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.85);
+  pointer-events: none;
+}
+
+/* --------------------------------------------------------------------------
+   F3. LED Color Selector Popover (Compact Desktop & Touch Friendly)
+   -------------------------------------------------------------------------- */
+.led-color-popover {
+  position: fixed;
+  z-index: 10000;
+  width: 200px;
+  background: #0f172a;
+  border: 1.5px solid #334155;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6), 0 0 12px rgba(56, 189, 248, 0.2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: var(--font-sans, sans-serif);
+  animation: scaleUp 0.12s ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.led-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #1e293b;
+  border-bottom: 1px solid #334155;
+}
+
+.led-popover-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #f8fafc;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.led-popover-close-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 3px;
+  transition: color 0.12s ease;
+}
+
+.led-popover-close-btn:hover {
+  color: #f8fafc;
+}
+
+.led-popover-body {
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  gap: 3px;
+}
+
+.led-color-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: #cbd5e1;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.12s ease;
+}
+
+.led-color-option:hover {
+  background: #1e293b;
+  color: #f8fafc;
+  border-color: #334155;
+}
+
+.led-color-option.selected {
+  background: rgba(2, 132, 199, 0.2);
+  border-color: #0284c7;
+  color: #38bdf8;
+  font-weight: 700;
+}
+
+.led-color-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  flex-shrink: 0;
+}
+
+.led-color-name {
+  flex: 1;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.led-color-check {
+  font-size: 12px;
+  font-weight: 800;
+  color: #38bdf8;
+  width: 14px;
+  text-align: right;
 }
 
 
@@ -1450,143 +2425,488 @@
   border-radius: 4px;
 }
 
-.motor-rotor-hub {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: radial-gradient(circle, #334155 0%, #0f172a 100%);
-  border: 2.5px solid #94a3b8;
+/* --------------------------------------------------------------------------
+   G. REALISTIC INDUSTRIAL 12V DC MOTOR (Horizontal Side-View Motor-Can)
+   -------------------------------------------------------------------------- */
+.motor-visual {
+  width: 100%;
+  height: 100%;
   position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5), inset 0 1px 3px rgba(255, 255, 255, 0.4);
-  z-index: 2;
+  pointer-events: none;
+  box-sizing: border-box;
 }
 
-.motor-rotor-blades {
-  width: 36px;
-  height: 36px;
+/* Horizontal Side-View Assembly (Motor axis runs horizontally at rotation 0°) */
+.motor-visual .motor-side-assembly {
+  position: absolute;
+  left: 6px;
+  top: 25px;
+  width: 104px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  z-index: 3;
+}
+
+/* 1. Horizontal Steel Drive Shaft (Visibly projecting to the LEFT) */
+.motor-visual .motor-shaft-horizontal {
+  width: 22px;
+  height: 5px;
   position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.motor-visual .motor-shaft-steel {
+  width: 22px;
+  height: 5px;
+  background: linear-gradient(180deg, #64748b 0%, #cbd5e1 25%, #ffffff 50%, #cbd5e1 75%, #475569 100%);
+  border-radius: 1.5px 0 0 1.5px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45), inset 0 1px 1px #ffffff;
+  position: relative;
+}
+
+.motor-visual .motor-shaft-reflection {
+  position: absolute;
+  top: 1.5px;
+  left: 0;
+  right: 0;
+  height: 1.5px;
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.motor-visual .motor-shaft-tip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1.5px;
+  height: 5px;
+  background: #f8fafc;
+  border-radius: 1.5px 0 0 1.5px;
+}
+
+/* Front Fan Mount attached directly onto the shaft tip */
+.motor-visual .motor-fan-mount {
+  position: absolute;
+  left: 2px;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
+  pointer-events: none;
+  z-index: 6;
+}
+
+/* Single Shared Rotating Assembly for 3-Blade Fan and 3 Blue Dots */
+.motor-visual .motor-rotor-blades {
+  width: 24px;
+  height: 24px;
+  position: relative;
   transform-origin: center center;
   transition: transform 0.1s linear;
 }
 
-.motor-rotor-blades.spinning {
+.motor-visual .motor-rotor-blades.spinning {
   animation: motor-spin-anim var(--spin-speed, 0.35s) linear infinite;
 }
 
-.motor-rotor-blades.spinning.ccw,
+.motor-visual .motor-rotor-blades.spinning.ccw,
 .workspace-component.spinning.ccw .motor-rotor-blades {
   animation: motor-spin-anim-ccw var(--spin-speed, 0.35s) linear infinite;
 }
 
-@keyframes motor-spin-anim {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes motor-spin-anim-ccw {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(-360deg);
-  }
-}
-
-.motor-blade {
+/* Central Fan Hub */
+.motor-visual .motor-fan-hub {
   position: absolute;
-  width: 16px;
-  height: 6px;
-  background: linear-gradient(90deg, #38bdf8 0%, #0284c7 100%);
-  border-radius: 3px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-  transform-origin: 0% 50%;
   left: 50%;
-  top: calc(50% - 3px);
-}
-
-.motor-blade.blade-1 {
-  transform: rotate(0deg);
-}
-
-.motor-blade.blade-2 {
-  transform: rotate(120deg);
-}
-
-.motor-blade.blade-3 {
-  transform: rotate(240deg);
-}
-
-.motor-shaft-center {
-  position: absolute;
-  width: 10px;
-  height: 10px;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: radial-gradient(circle, #facc15 0%, #b45309 100%);
-  border: 1.5px solid #ffffff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-  z-index: 3;
-}
-
-.motor-vents {
-  position: absolute;
-  bottom: 5px;
-  display: flex;
-  gap: 4px;
-  z-index: 1;
-}
-
-.motor-vent {
-  width: 8px;
-  height: 3px;
-  background-color: #020617;
-  border-radius: 1px;
-}
-
-.motor-rpm-badge {
-  position: absolute;
-  top: -10px;
-  background: #022c22;
-  border: 1.5px solid #059669;
-  border-radius: 4px;
-  padding: 1px 6px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 700;
-  color: #34d399;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-  display: flex;
-  align-items: center;
-  gap: 3px;
+  background: radial-gradient(circle at 35% 35%, #475569 0%, #1e293b 65%, #09090b 100%);
+  border: 0.5px solid #0f172a;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
   z-index: 4;
 }
 
-.rpm-unit {
-  font-size: 8px;
+.motor-visual .motor-fan-hub-pin {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: #94a3b8;
+}
+
+/* Realistic 3 Curved Industrial Fan Blades (120° Spacing) */
+.motor-visual .motor-fan-blade {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 5px;
+  height: 9.5px;
+  margin-left: -2.5px;
+  margin-top: -9.5px;
+  transform-origin: center bottom;
+  background: linear-gradient(135deg, #334155 0%, #1e293b 55%, #09090b 100%);
+  border-radius: 4px 1px 1px 2px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45), inset 0 0.5px 0.5px rgba(255, 255, 255, 0.25);
+  z-index: 2;
+  transition: opacity 0.2s ease;
+}
+
+.motor-visual .motor-rotor-blades.spinning .motor-fan-blade {
+  opacity: 0.92;
+}
+
+.motor-visual .blade-1 {
+  transform: rotate(0deg);
+}
+
+.motor-visual .blade-2 {
+  transform: rotate(120deg);
+}
+
+.motor-visual .blade-3 {
+  transform: rotate(240deg);
+}
+
+/* 3 Blue Rotation Indicator Dots (120° Spacing around Center) */
+.motor-visual .motor-rot-dot {
+  position: absolute;
+  width: 2.5px;
+  height: 2.5px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 2.5px #38bdf8;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.motor-visual .dot-1 {
+  left: 10.75px;
+  top: 4.5px;
+}
+
+.motor-visual .dot-2 {
+  left: 16.5px;
+  top: 14.5px;
+}
+
+.motor-visual .dot-3 {
+  left: 5px;
+  top: 14.5px;
+}
+
+/* 2. Front End Bell & Bearing Boss */
+.motor-visual .motor-front-bell {
+  width: 8px;
+  height: 24px;
+  position: relative;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, #475569 0%, #94a3b8 25%, #e2e8f0 50%, #94a3b8 75%, #334155 100%);
+  border-radius: 3px 0 0 3px;
+  border: 1px solid #334155;
+  border-right: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  box-shadow: inset 1px 0 1px rgba(255, 255, 255, 0.4);
+}
+
+.motor-visual .motor-bearing-boss {
+  width: 4px;
+  height: 12px;
+  border-radius: 2px 0 0 2px;
+  background: #1e293b;
+  border: 0.5px solid #475569;
+  border-right: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@keyframes motor-spin-anim {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes motor-spin-anim-ccw {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(-360deg); }
+}
+
+/* 3. Long Cylindrical Stamped Metal Can Body (Aspect Ratio: 82px / 34px = 2.41 : 1) */
+.motor-visual .motor-metal-can {
+  width: 62px;
+  height: 34px;
+  position: relative;
+  flex-shrink: 0;
+  /* Cylindrical brushed steel & gunmetal gradient across horizontal axis */
+  background: linear-gradient(180deg, #18181b 0%, #334155 12%, #64748b 28%, #cbd5e1 45%, #f1f5f9 50%, #cbd5e1 55%, #64748b 72%, #334155 88%, #0f172a 100%);
+  border-radius: 2px;
+  border: 1.5px solid #334155;
+  box-shadow: 
+    0 4px 12px rgba(0, 0, 0, 0.45),
+    inset 0 1.5px 2px rgba(255, 255, 255, 0.4),
+    inset 0 -1.5px 3px rgba(0, 0, 0, 0.6);
+}
+
+.motor-visual .motor-can-reflection {
+  position: absolute;
+  top: 16px;
+  left: 4px;
+  right: 4px;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 1px;
+}
+
+.motor-visual .motor-can-seam {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: rgba(0, 0, 0, 0.35);
+  box-shadow: 1px 0 0 rgba(255, 255, 255, 0.15);
+}
+
+.motor-visual .motor-can-crimp {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(180deg, #09090b 0%, #475569 50%, #09090b 100%);
+}
+.motor-visual .crimp-front { left: 4px; }
+.motor-visual .crimp-rear { right: 4px; }
+
+/* Stamped Industrial Cooling Vents */
+.motor-visual .motor-can-vent {
+  position: absolute;
+  width: 6px;
+  height: 2.5px;
+  background: #09090b;
+  border-radius: 1px;
+  box-shadow: inset 0 1px 1px #000000;
+}
+.motor-visual .vent-1 { left: 16px; top: 6px; }
+.motor-visual .vent-2 { left: 16px; bottom: 6px; }
+
+/* 4. Rear End Cap (Dark Molded Composite) */
+.motor-visual .motor-rear-cap {
+  width: 12px;
+  height: 30px;
+  position: relative;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, #18181b 0%, #27272a 30%, #3f3f46 50%, #27272a 70%, #09090b 100%);
+  border-radius: 0 5px 5px 0;
+  border: 1px solid #18181b;
+  border-left: none;
+  box-shadow: inset 0 -1px 2px rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.motor-visual .motor-rear-seam {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1.5px;
+  background: #09090b;
+}
+
+.motor-visual .motor-brush-bulge {
+  width: 4px;
+  height: 16px;
+  border-radius: 0 2px 2px 0;
+  background: #09090b;
+  border: 0.5px solid #27272a;
+  margin-right: -4px;
+}
+
+/* --------------------------------------------------------------------------
+   5. Electrical Contact Straps & Fixed Hardware Terminal Lugs
+   Left (+ / Red) centered exactly on (20, 80)
+   Right (- / Black) centered exactly on (100, 80)
+   -------------------------------------------------------------------------- */
+.motor-visual .motor-terminal-straps {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Insulated Red Contact Strap connecting rear cap to positive terminal at (20, 80) */
+.motor-visual .motor-contact-strap-pos {
+  position: absolute;
+  left: 20px;
+  top: 57px;
+  width: 80px;
+  height: 17px;
+  border-left: 2.5px solid #ef4444;
+  border-bottom: 2.5px solid #ef4444;
+  border-bottom-left-radius: 4px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+/* Short Contact Tab connecting rear cap directly down to negative terminal at (100, 80) */
+.motor-visual .motor-contact-tab-neg {
+  position: absolute;
+  left: 99px;
+  top: 55px;
+  width: 2.5px;
+  height: 19px;
+  background: linear-gradient(180deg, #27272a 0%, #475569 50%, #1e293b 100%);
+  border-radius: 1px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.motor-visual .motor-terminal-hardware {
+  position: absolute;
+  top: 80px;
+  width: 16px;
+  height: 16px;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.motor-visual .motor-terminal-pos {
+  left: 20px;
+}
+
+.motor-visual .motor-terminal-neg {
+  left: 100px;
+}
+
+/* Heavy-duty Industrial Bushing / Collar */
+.motor-visual .motor-terminal-collar {
+  width: 12px;
+  height: 12px;
+  border-radius: 2.5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 2;
+}
+
+.motor-visual .motor-collar-pos {
+  background: radial-gradient(circle at 35% 35%, #ef4444 0%, #dc2626 50%, #991b1b 100%);
+  border: 1px solid #7f1d1d;
+  box-shadow: 
+    0 2px 4px rgba(0, 0, 0, 0.45),
+    inset 0 1px 1px rgba(255, 255, 255, 0.35),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.5);
+}
+
+.motor-visual .motor-collar-neg {
+  background: radial-gradient(circle at 35% 35%, #475569 0%, #334155 50%, #0f172a 100%);
+  border: 1px solid #020617;
+  box-shadow: 
+    0 2px 4px rgba(0, 0, 0, 0.45),
+    inset 0 1px 1px rgba(255, 255, 255, 0.25),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.5);
+}
+
+/* Metallic Contact Pin / Stud at center */
+.motor-visual .motor-terminal-stud {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #ffffff 0%, #cbd5e1 55%, #64748b 100%);
+  box-shadow: 
+    inset 0 1px 1px #ffffff,
+    0 1px 2px rgba(0, 0, 0, 0.35);
+  border: 0.5px solid #475569;
+}
+
+/* Polarity Marks (+ / -) */
+.motor-visual .motor-polarity-mark {
+  position: absolute;
+  top: -13px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+
+.motor-visual .motor-polarity-pos {
+  color: #ef4444;
+}
+
+.motor-visual .motor-polarity-neg {
+  color: #cbd5e1;
+}
+
+/* Compact Digital RPM Instrument Badge (Safely positioned above-right) */
+.motor-visual .motor-rpm-badge {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  background: rgba(2, 44, 34, 0.92);
+  border: 1px solid #059669;
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  font-weight: 700;
+  color: #34d399;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  gap: 2.5px;
+  z-index: 4;
+}
+
+.motor-visual .rpm-unit {
+  font-size: 7px;
   color: #a7f3d0;
 }
 
-.motor-label {
+/* Specification Label (Centered between terminals, safely avoiding wires) */
+.motor-visual .motor-label {
   position: absolute;
-  bottom: -20px;
-  font-size: 11px;
+  top: 88px;
+  left: 60px;
+  transform: translate(-50%, -50%);
+  font-size: 9px;
   font-family: var(--font-mono);
   font-weight: 700;
-  color: #1e293b;
-  background: rgba(255, 255, 255, 0.95);
-  padding: 1px 6px;
-  border-radius: 4px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  color: #0f172a;
   white-space: nowrap;
+  background: transparent;
+  border: none;
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none;
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.85);
+  z-index: 3;
+  pointer-events: none;
 }
 
 /* --------------------------------------------------------------------------
@@ -1690,12 +3010,15 @@
   font-size: 10px;
   font-family: var(--font-mono);
   font-weight: 700;
-  color: #1e293b;
+  color: #0f172a;
   white-space: nowrap;
-  background: rgba(255, 255, 255, 0.95);
-  padding: 0.5px 5px;
-  border-radius: 3px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  background: transparent;
+  border: none;
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none;
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.85);
+  pointer-events: none;
 }
 
 /* Subtle bias indicator badge (Hidden during normal STANDBY/idle, shown subtly during forward/reverse bias) */

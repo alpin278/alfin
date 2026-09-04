@@ -239,13 +239,13 @@
                   <span class="component-item-sub">12V / 20W</span>
                 </div>
               </div>
-              <div class="component-card" data-component-type="led" draggable="true">
+              <div class="component-card" data-component-type="led" data-search-aliases="led merah led hijau led biru led kuning led putih red green blue yellow white multiwarna" draggable="true">
                 <div class="component-card-icon">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="6"></circle><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line></svg>
                 </div>
                 <div class="component-card-info">
-                  <span class="component-item-name">LED Merah</span>
-                  <span class="component-item-sub">2V / 20mA</span>
+                  <span class="component-item-name">LED</span>
+                  <span class="component-item-sub">Multiwarna / 20mA</span>
                 </div>
               </div>
               <div class="component-card" data-component-type="motor_dc" draggable="true">

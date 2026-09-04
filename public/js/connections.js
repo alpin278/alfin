@@ -42,6 +42,12 @@ export class ConnectionEngine {
     this.lastTapTime = 0;
     this.lastTapPos = { x: 0, y: 0 };
     this.lastConnectionFinishTime = 0;
+
+    // Wire Direction Lock — Anti-Backtracking State
+    // Tracks the direction of the last committed waypoint segment
+    // to prevent immediate 180° reversal in the live preview.
+    // Values: null | 'RIGHT' | 'LEFT' | 'UP' | 'DOWN'
+    this.lastCommittedDirection = null;
   }
 
   init() {
@@ -450,6 +456,7 @@ export class ConnectionEngine {
       this.snapTarget = null;
       this.hoveredTerminal = null;
       this.sourceHangingWire = null;
+      this.lastCommittedDirection = null; // No prior committed segment
       this.sourceTerminal = {
         componentId: compId,
         terminalId: termId,
@@ -618,6 +625,7 @@ export class ConnectionEngine {
     this.waypoints = [];
     this.snapTarget = null;
     this.hoveredTerminal = null;
+    this.lastCommittedDirection = null; // No prior committed segment
 
     if (this.wirePreview) {
       this.wirePreview.style.display = "block";
@@ -746,7 +754,8 @@ export class ConnectionEngine {
    * Normalizes an orthogonal route:
    * 1. Removes consecutive duplicate points (within tolerance)
    * 2. Collapses 3+ collinear points ONLY if the middle point is not a manual waypoint
-   * 3. Snaps nearly-straight 2-point routes to strictly identical coordinates
+   * 3. Prunes non-manual U-turns / backtracks where cursor reverses over the segment
+   * 4. Snaps nearly-straight 2-point routes to strictly identical coordinates
    */
   normalizeOrthogonalRoute(points, tolerance = 2) {
     if (!points || points.length <= 1) return points || [];
@@ -773,7 +782,7 @@ export class ConnectionEngine {
       return result;
     }
 
-    // Step 2: Iteratively collapse collinear triplets ONLY if the middle point is NOT a manual waypoint
+    // Step 2: Iteratively collapse collinear triplets and prune U-turns ONLY if the middle point is NOT a manual waypoint
     let changed = true;
     while (changed && result.length >= 3) {
       changed = false;
@@ -809,6 +818,37 @@ export class ConnectionEngine {
 
       simplified.push(result[result.length - 1]);
       result = simplified;
+
+      // Step 2b: Prune U-turns / backtracks where intermediate point is NOT a manual waypoint
+      if (!changed && result.length >= 3) {
+        for (let i = 0; i < result.length - 2; i++) {
+          const p1 = result[i];
+          const p2 = result[i + 1];
+          const p3 = result[i + 2];
+          if (p2.isManual) continue;
+
+          // Horizontal backtrack: p1.y == p2.y == p3.y
+          if (Math.abs(p1.y - p2.y) <= tolerance && Math.abs(p2.y - p3.y) <= tolerance) {
+            const dx1 = p2.x - p1.x;
+            const dx2 = p3.x - p2.x;
+            if ((dx1 > 0 && dx2 < 0) || (dx1 < 0 && dx2 > 0)) {
+              result.splice(i + 1, 1);
+              changed = true;
+              break;
+            }
+          }
+          // Vertical backtrack: p1.x == p2.x == p3.x
+          if (Math.abs(p1.x - p2.x) <= tolerance && Math.abs(p2.x - p3.x) <= tolerance) {
+            const dy1 = p2.y - p1.y;
+            const dy2 = p3.y - p2.y;
+            if ((dy1 > 0 && dy2 < 0) || (dy1 < 0 && dy2 > 0)) {
+              result.splice(i + 1, 1);
+              changed = true;
+              break;
+            }
+          }
+        }
+      }
     }
 
     // Final alignment on 2 remaining endpoints if collapsed to single segment
@@ -836,27 +876,31 @@ export class ConnectionEngine {
     const pt1 = { x: Math.round(p1.x), y: Math.round(p1.y) };
     const pt2 = { x: Math.round(p2.x), y: Math.round(p2.y) };
 
-    if (!waypoints || waypoints.length === 0) {
-      // Direct connection between p1 and p2 (0 manual waypoints)
-      const dx = Math.abs(pt2.x - pt1.x);
-      const dy = Math.abs(pt2.y - pt1.y);
+    const routeOrthogonalSegment = (from, to) => {
+      const dx = Math.abs(to.x - from.x);
+      const dy = Math.abs(to.y - from.y);
 
       // Case 1: Same Y -> ONE straight horizontal segment
       if (dy <= tolerance) {
-        return [{ x: pt1.x, y: pt1.y }, { x: pt2.x, y: pt1.y }];
+        return [{ x: from.x, y: from.y }, { x: to.x, y: from.y }];
       }
 
       // Case 2: Same X -> ONE straight vertical segment
       if (dx <= tolerance) {
-        return [{ x: pt1.x, y: pt1.y }, { x: pt1.x, y: pt2.y }];
+        return [{ x: from.x, y: from.y }, { x: from.x, y: to.y }];
       }
 
       // Case 3: Diagonal -> ONE deterministic horizontal-first L-bend
       return [
-        { x: pt1.x, y: pt1.y },
-        { x: pt2.x, y: pt1.y, isAuto: true },
-        { x: pt2.x, y: pt2.y }
+        { x: from.x, y: from.y },
+        { x: to.x, y: from.y, isAuto: true },
+        { x: to.x, y: to.y }
       ];
+    };
+
+    if (!waypoints || waypoints.length === 0) {
+      // Direct connection between p1 and p2 (0 manual waypoints)
+      return routeOrthogonalSegment(pt1, pt2);
     }
 
     // Manual waypoints present: route segment-by-segment
@@ -894,8 +938,19 @@ export class ConnectionEngine {
 
     // Snap to workspace grid
     const gridSize = this.workspace?.gridSize || 20;
-    const wpX = Math.round(x / gridSize) * gridSize;
-    const wpY = Math.round(y / gridSize) * gridSize;
+    let wpX = Math.round(x / gridSize) * gridSize;
+    let wpY = Math.round(y / gridSize) * gridSize;
+
+    // Direction Lock: clamp waypoint to prevent committing in the forbidden direction
+    if (this.lastCommittedDirection && this.waypoints.length > 0) {
+      const anchor = this.waypoints[this.waypoints.length - 1];
+      switch (this.lastCommittedDirection) {
+        case 'RIGHT': if (wpX < anchor.x) wpX = anchor.x; break;
+        case 'LEFT':  if (wpX > anchor.x) wpX = anchor.x; break;
+        case 'DOWN':  if (wpY < anchor.y) wpY = anchor.y; break;
+        case 'UP':    if (wpY > anchor.y) wpY = anchor.y; break;
+      }
+    }
 
     const dist = Math.hypot(wpX - lastPoint.x, wpY - lastPoint.y);
 
@@ -903,6 +958,16 @@ export class ConnectionEngine {
     if (dist < 4) return;
 
     this.waypoints.push({ x: wpX, y: wpY, isManual: true });
+
+    // Direction Lock: compute committed direction from previous anchor to this waypoint
+    const ddx = wpX - lastPoint.x;
+    const ddy = wpY - lastPoint.y;
+    if (Math.abs(ddx) > Math.abs(ddy)) {
+      this.lastCommittedDirection = ddx > 0 ? 'RIGHT' : 'LEFT';
+    } else if (Math.abs(ddy) > 0) {
+      this.lastCommittedDirection = ddy > 0 ? 'DOWN' : 'UP';
+    }
+    // If ddx === 0 && ddy === 0 (shouldn't happen due to dist check), keep previous direction
     
     // Update currentMousePos immediately to the new waypoint
     this.currentMousePos = { x: wpX, y: wpY };
@@ -919,6 +984,7 @@ export class ConnectionEngine {
     this.waypoints = [];
     this.snapTarget = null;
     this.hoveredTerminal = null;
+    this.lastCommittedDirection = null; // Reset direction lock
     this.lastConnectionFinishTime = Date.now();
 
     if (this.activeTerminalEl && this.activeTerminalPointerId !== null) {
@@ -1091,7 +1157,28 @@ export class ConnectionEngine {
     }
 
     const p1 = { x: this.sourceTerminal.worldX, y: this.sourceTerminal.worldY };
-    const p2 = this.currentMousePos;
+    let p2 = { ...this.currentMousePos };
+
+    // Direction Lock: Anti-backtracking clamp on preview endpoint
+    // After a waypoint is committed, prevent the preview from reversing
+    // back toward the previous committed waypoint direction.
+    if (this.lastCommittedDirection && this.waypoints.length > 0) {
+      const lastAnchor = this.waypoints[this.waypoints.length - 1];
+      switch (this.lastCommittedDirection) {
+        case 'RIGHT': // Committed going RIGHT → cannot go LEFT (p2.x must be >= anchor.x)
+          if (p2.x < lastAnchor.x) p2.x = lastAnchor.x;
+          break;
+        case 'LEFT':  // Committed going LEFT → cannot go RIGHT (p2.x must be <= anchor.x)
+          if (p2.x > lastAnchor.x) p2.x = lastAnchor.x;
+          break;
+        case 'DOWN':  // Committed going DOWN → cannot go UP (p2.y must be >= anchor.y)
+          if (p2.y < lastAnchor.y) p2.y = lastAnchor.y;
+          break;
+        case 'UP':    // Committed going UP → cannot go DOWN (p2.y must be <= anchor.y)
+          if (p2.y > lastAnchor.y) p2.y = lastAnchor.y;
+          break;
+      }
+    }
 
     // Always use orthogonal (Manhattan) routing — no diagonal preview
     this.wirePreview.setAttribute("d", this.computeOrthogonalPath(p1, p2, this.waypoints));

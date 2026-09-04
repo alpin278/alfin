@@ -1124,7 +1124,17 @@ export function loadCircuitFromJSON(jsonString) {
 
     // 2. Set komponen dan koneksi baru
     const state = stateManager.getState();
-    state.components = JSON.parse(JSON.stringify(data.components || []));
+    const loadedComps = JSON.parse(JSON.stringify(data.components || []));
+    loadedComps.forEach(c => {
+      if (c.type === "led") {
+        if (!c.properties) c.properties = {};
+        if (!c.properties.ledColor) {
+          c.properties.ledColor = "red";
+          if (!c.properties.forwardVoltage) c.properties.forwardVoltage = 2.0;
+        }
+      }
+    });
+    state.components = loadedComps;
     state.connections = JSON.parse(JSON.stringify(data.connections || []));
 
     // 3. Trigger render ulang ke DOM dan SVG

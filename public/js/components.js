@@ -18,6 +18,47 @@ export const RESISTOR_COLORS = [
   { digit: 9, name: "Putih", hex: "#f8fafc" }
 ];
 
+/**
+ * Single Source of Truth for Educational LED Presets
+ */
+export const LED_PRESETS = {
+  red: {
+    name: "Merah",
+    color: "red",
+    forwardVoltage: 2.0,
+    swatchHex: "#ef4444",
+    label: "LED RED 2.0V"
+  },
+  yellow: {
+    name: "Kuning",
+    color: "yellow",
+    forwardVoltage: 2.1,
+    swatchHex: "#facc15",
+    label: "LED YELLOW 2.1V"
+  },
+  green: {
+    name: "Hijau",
+    color: "green",
+    forwardVoltage: 2.2,
+    swatchHex: "#10b981",
+    label: "LED GREEN 2.2V"
+  },
+  blue: {
+    name: "Biru",
+    color: "blue",
+    forwardVoltage: 3.0,
+    swatchHex: "#38bdf8",
+    label: "LED BLUE 3.0V"
+  },
+  white: {
+    name: "Putih",
+    color: "white",
+    forwardVoltage: 3.0,
+    swatchHex: "#f8fafc",
+    label: "LED WHITE 3.0V"
+  }
+};
+
 export function calculateResistorBands(resistance) {
   const r = Math.max(Number(resistance) || 1, 0.1);
   let d1 = 2, d2 = 2, mult = 1;
@@ -338,10 +379,10 @@ export const COMPONENT_PROTOTYPES = {
     icon: "🔴",
     width: 80,
     height: 80,
-    defaultProps: { forwardVoltage: 2.0, nominalCurrent: 0.020, maxContinuousCurrent: 0.025 },
+    defaultProps: { ledColor: "red", forwardVoltage: 2.0, nominalCurrent: 0.020, maxContinuousCurrent: 0.025 },
     terminals: [
-      { id: "term_anode", name: "A", label: "Anoda (+)", relX: 20, relY: 60, color: "#ef4444" },
-      { id: "term_cathode", name: "K", label: "Katoda (-)", relX: 60, relY: 60, color: "#0f172a" }
+      { id: "term_anode", name: "A", label: "Anoda (+)", relX: 60, relY: 60, color: "#ef4444" },
+      { id: "term_cathode", name: "K", label: "Katoda (-)", relX: 20, relY: 60, color: "#0f172a" }
     ]
   },
   resistor: {
@@ -485,7 +526,8 @@ export class ComponentEngine {
         paletteCards.forEach((card) => {
           const name = card.querySelector(".component-item-name")?.textContent.toLowerCase() || "";
           const sub = card.querySelector(".component-item-sub")?.textContent.toLowerCase() || "";
-          if (name.includes(q) || sub.includes(q)) {
+          const aliases = card.dataset.searchAliases?.toLowerCase() || "";
+          if (name.includes(q) || sub.includes(q) || aliases.includes(q)) {
             card.style.display = "flex";
           } else {
             card.style.display = "none";
@@ -1041,6 +1083,8 @@ export class ComponentEngine {
         this.openMotorModal(comp);
       } else if (comp.type === "diode") {
         this.openDiodeModal(comp);
+      } else if (comp.type === "led") {
+        this.openLedModal(comp);
       }
     };
 
@@ -1075,15 +1119,59 @@ export class ComponentEngine {
   getComponentInnerHTML(comp) {
     if (comp.type === "battery") {
       return `
-        <div class="battery-visual">
-          <div class="battery-body">
-            <div class="battery-stripe"></div>
-            <span class="battery-pole-neg">-</span>
-            <div class="battery-center-label">
-              <span class="battery-volt-text" id="volt-text-${comp.id}">${comp.properties.voltage}V</span>
-              <span class="battery-type-text">DC POWER</span>
+        <div class="battery-visual" id="battery-vis-${comp.id}">
+          <!-- Negative Terminal Hardware Lug centered at (10, 40) -->
+          <div class="battery-terminal-hardware terminal-hardware-neg">
+            <div class="terminal-bracket bracket-neg"></div>
+            <div class="terminal-collar collar-neg">
+              <div class="terminal-metallic-stud"></div>
             </div>
-            <span class="battery-pole-pos">+</span>
+            <span class="battery-polarity-mark polarity-neg">-</span>
+          </div>
+
+          <!-- Main Industrial Battery Pack Casing (106px x 62px, centered at 70, 40) -->
+          <div class="battery-casing">
+            <!-- Top Structural Header & Seam -->
+            <div class="battery-casing-header">
+              <div class="battery-casing-seam"></div>
+              <div class="battery-corner-notch notch-tl"></div>
+              <div class="battery-corner-notch notch-tr"></div>
+            </div>
+
+            <!-- Recessed Industrial Spec Plate -->
+            <div class="battery-label-plate">
+              <div class="battery-brand-row">
+                <span class="battery-spec-brand">INDUSTRIAL DC</span>
+                <span class="battery-spec-badge">12V PACK</span>
+              </div>
+              <div class="battery-voltage-display">
+                <span class="battery-volt-text" id="volt-text-${comp.id}">${comp.properties.voltage}V</span>
+                <span class="battery-unit-sub">BATTERY</span>
+              </div>
+              <div class="battery-spec-footer">
+                <span class="battery-polarity-hint hint-neg">[-] GND</span>
+                <span class="battery-spec-chemistry">SEALED CELL</span>
+                <span class="battery-polarity-hint hint-pos">[+] 12V</span>
+              </div>
+            </div>
+
+            <!-- Bottom Structural Footer & Grip Ridges -->
+            <div class="battery-casing-footer">
+              <div class="battery-grip-ridge"></div>
+              <div class="battery-grip-ridge"></div>
+              <div class="battery-grip-ridge"></div>
+              <div class="battery-corner-notch notch-bl"></div>
+              <div class="battery-corner-notch notch-br"></div>
+            </div>
+          </div>
+
+          <!-- Positive Terminal Hardware Lug centered at (130, 40) -->
+          <div class="battery-terminal-hardware terminal-hardware-pos">
+            <div class="terminal-bracket bracket-pos"></div>
+            <div class="terminal-collar collar-pos">
+              <div class="terminal-metallic-stud"></div>
+            </div>
+            <span class="battery-polarity-mark polarity-pos">+</span>
           </div>
         </div>
       `;
@@ -1091,22 +1179,55 @@ export class ComponentEngine {
       const isClosed = comp.properties.isClosed;
       return `
         <div class="switch-visual ${isClosed ? 'closed' : ''}" id="switch-vis-${comp.id}">
+          <!-- Terminal 1 Hardware Lug centered at (10, 40) -->
+          <div class="switch-terminal-hardware terminal-hardware-1">
+            <div class="switch-terminal-bracket bracket-1"></div>
+            <div class="switch-terminal-collar">
+              <div class="switch-terminal-stud"></div>
+            </div>
+            <span class="switch-pin-mark pin-mark-1">1</span>
+          </div>
+
+          <!-- Main Molded Industrial Housing (96px x 54px centered at 70, 40) -->
           <div class="switch-casing">
-            <div class="switch-mount-screw screw-left"></div>
-            <div class="switch-bezel">
-              <div class="rocker-button ${isClosed ? 'on' : 'off'}" id="rocker-btn-${comp.id}">
-                <div class="rocker-half rocker-half-on">
-                  <span class="rocker-symbol">I</span>
-                  <span class="rocker-neon-dot"></span>
-                </div>
-                <div class="rocker-divider"></div>
-                <div class="rocker-half rocker-half-off">
-                  <span class="rocker-symbol">O</span>
+            <div class="switch-housing-bevel">
+              <div class="switch-corner-tab tab-tl"></div>
+              <div class="switch-corner-tab tab-tr"></div>
+              <div class="switch-corner-tab tab-bl"></div>
+              <div class="switch-corner-tab tab-br"></div>
+
+              <!-- Recessed Switch Bezel / Mechanical Well -->
+              <div class="switch-bezel">
+                <!-- Physical Moving Rocker Button -->
+                <div class="rocker-button ${isClosed ? 'on' : 'off'}" id="rocker-btn-${comp.id}">
+                  <!-- Left Half: I (ON) -->
+                  <div class="rocker-half rocker-half-on">
+                    <span class="rocker-symbol">I</span>
+                    <span class="rocker-indicator-dot"></span>
+                  </div>
+
+                  <!-- Center Mechanical Pivot Ridge -->
+                  <div class="rocker-pivot-ridge"></div>
+
+                  <!-- Right Half: O (OFF) -->
+                  <div class="rocker-half rocker-half-off">
+                    <span class="rocker-symbol">O</span>
+                  </div>
                 </div>
               </div>
             </div>
-            <div class="switch-mount-screw screw-right"></div>
           </div>
+
+          <!-- Terminal 2 Hardware Lug centered at (130, 40) -->
+          <div class="switch-terminal-hardware terminal-hardware-2">
+            <div class="switch-terminal-bracket bracket-2"></div>
+            <div class="switch-terminal-collar">
+              <div class="switch-terminal-stud"></div>
+            </div>
+            <span class="switch-pin-mark pin-mark-2">2</span>
+          </div>
+
+          <!-- External Status Label -->
           <div class="switch-status-label" id="switch-lbl-${comp.id}">${isClosed ? 'ON (TERTUTUP)' : 'OFF (TERBUKA)'}</div>
         </div>
       `;
@@ -1114,9 +1235,33 @@ export class ComponentEngine {
       return `
         <div class="lamp-visual" id="lamp-vis-${comp.id}">
           <div class="lamp-bulb" id="lamp-bulb-${comp.id}">
-            <div class="lamp-filament"></div>
+            <div class="lamp-internal-glow"></div>
+            <div class="lamp-filament">
+              <svg class="lamp-filament-svg" viewBox="0 0 58 58" width="58" height="58">
+                <!-- Primary & Secondary Curved Glass Specular Reflections -->
+                <path class="glass-refl-primary" d="M 13 26 C 12 18, 18 12, 27 10" fill="none" stroke="rgba(255,255,255,0.75)" stroke-width="1.8" stroke-linecap="round" />
+                <path class="glass-refl-secondary" d="M 12 31 C 11.5 28.5, 12 26.5, 13 25" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1.3" stroke-linecap="round" />
+                
+                <!-- Internal Mount Stem (Glass Tube & Lead Wires) -->
+                <path class="stem-glass-tube" d="M 24 58 L 24 46 Q 29 44 34 46 L 34 58 Z" fill="rgba(203,213,225,0.22)" stroke="rgba(148,163,184,0.35)" stroke-width="0.75" />
+                <line class="stem-lead-wire" x1="26" y1="56" x2="26" y2="42" stroke="#64748b" stroke-width="1.2" stroke-linecap="round" />
+                <line class="stem-lead-wire" x1="32" y1="56" x2="32" y2="42" stroke="#64748b" stroke-width="1.2" stroke-linecap="round" />
+
+                <!-- Thin Support Wires Rising from Stem with Terminal Hooks -->
+                <path class="support-wire support-wire-l" d="M 26 42 L 22 25 L 23.5 24" fill="none" stroke="#475569" stroke-width="1.1" stroke-linecap="round" />
+                <path class="support-wire support-wire-r" d="M 32 42 L 36 25 L 34.5 24" fill="none" stroke="#475569" stroke-width="1.1" stroke-linecap="round" />
+
+                <!-- Coiled Tungsten Filament Arch between Hooks -->
+                <path class="filament-coil" d="M 23.5 24 q 1.2 -2.2, 2.2 0 q 1.2 -2.2, 2.2 0 q 1.2 -2.2, 2.2 0 q 1.2 -2.2, 2.2 0 q 1.2 -2.2, 2.2 0 q 1.2 -2.2, 2.2 0" fill="none" stroke="#334155" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </div>
           </div>
-          <div class="lamp-base"></div>
+          <div class="lamp-glass-neck"></div>
+          <div class="lamp-base">
+            <div class="lamp-base-rim"></div>
+            <div class="lamp-base-threads"></div>
+            <div class="lamp-base-contact"></div>
+          </div>
           <div class="lamp-leads-container">
             <div class="lamp-lead-wire lamp-lead-left"></div>
             <div class="lamp-lead-wire lamp-lead-right"></div>
@@ -1236,24 +1381,70 @@ export class ComponentEngine {
         </div>
       `;
     } else if (comp.type === "led") {
-      const vf = comp.properties?.forwardVoltage || 2;
-      const lbl = comp.properties?.label || `LED ${vf}V`;
+      const colorKey = comp.properties?.ledColor || "red";
+      const preset = LED_PRESETS[colorKey] || LED_PRESETS.red;
+      const vf = comp.properties?.forwardVoltage ?? preset.forwardVoltage;
+      const lbl = comp.properties?.label || preset.label || `LED ${vf}V`;
       return `
-        <div class="led-visual" id="led-vis-${comp.id}">
+        <div class="led-visual led-color-${colorKey}" id="led-vis-${comp.id}">
+          <!-- Restrained Outer Emission Halo (Driven by solved --led-intensity) -->
+          <div class="led-glow-halo"></div>
+
+          <!-- Metal Through-Hole Leads (LEFT: Cathode at 20, 60 / RIGHT: Anode at 60, 60) -->
           <div class="led-leads-container">
-            <div class="led-lead-wire led-lead-anode"></div>
-            <div class="led-lead-wire led-lead-cathode"></div>
-          </div>
-          <div class="led-casing">
-            <div class="led-dome">
-              <div class="led-specular-highlight"></div>
-              <div class="led-die-core">
-                <div class="led-post"></div>
-                <div class="led-anvil"></div>
+            <!-- Cathode Lead (Left, - / relX: 20, relY: 60) -->
+            <div class="led-lead-leg led-lead-cathode">
+              <div class="led-lead-standoff"></div>
+              <div class="led-lead-pin">
+                <div class="led-lead-stud"></div>
               </div>
             </div>
-            <div class="led-flange"></div>
+            <!-- Anode Lead (Right, + / relX: 60, relY: 60) -->
+            <div class="led-lead-leg led-lead-anode">
+              <div class="led-lead-standoff"></div>
+              <div class="led-lead-pin">
+                <div class="led-lead-stud"></div>
+              </div>
+            </div>
           </div>
+
+          <!-- 5mm Physical Epoxy Lens & Internal Semiconductor Construction -->
+          <div class="led-casing">
+            <!-- Rounded Epoxy Dome (Translucent deep red with cylindrical lower body) -->
+            <div class="led-dome">
+              <!-- Internal Die & Electrode Construction (Cathode Anvil on LEFT, Anode Post on RIGHT) -->
+              <div class="led-internal-assembly">
+                <div class="led-anvil-electrode">
+                  <div class="led-reflector-cup"></div>
+                  <div class="led-chip-die"></div>
+                </div>
+                <div class="led-post-electrode"></div>
+                <div class="led-bond-wire"></div>
+              </div>
+
+              <!-- Internal Active Emission Core (Point source originating inside the die) -->
+              <div class="led-internal-emission"></div>
+
+              <!-- Translucent Epoxy Lens Shading -->
+              <div class="led-lens-shading"></div>
+
+              <!-- Specular 3D Highlights -->
+              <div class="led-specular-primary"></div>
+              <div class="led-specular-secondary"></div>
+            </div>
+
+            <!-- Base Flange Lip with Flat Cathode Indicator on LEFT -->
+            <div class="led-flange">
+              <div class="led-flange-lip"></div>
+              <div class="led-cathode-flat"></div>
+            </div>
+          </div>
+
+          <!-- Subtle Polarity Identifiers (- on LEFT, + on RIGHT) -->
+          <span class="led-polarity-mark led-polarity-cathode">-</span>
+          <span class="led-polarity-mark led-polarity-anode">+</span>
+
+          <!-- Specification Label -->
           <div class="led-label" id="led-lbl-${comp.id}">${lbl}</div>
         </div>
       `;
@@ -1262,26 +1453,87 @@ export class ComponentEngine {
       const rpm = comp.properties.maxRpm || comp.properties.noLoadRpm || 3000;
       return `
         <div class="motor-visual" id="motor-vis-${comp.id}">
-          <div class="motor-casing">
-            <div class="motor-metal-shine"></div>
-            <div class="motor-rotor-hub">
-              <div class="motor-rotor-blades" id="motor-rotor-${comp.id}">
-                <div class="motor-blade blade-1"></div>
-                <div class="motor-blade blade-2"></div>
-                <div class="motor-blade blade-3"></div>
+          <!-- Horizontal Side-View DC Motor Structure (Axis runs horizontally at rotation 0°) -->
+          <div class="motor-side-assembly">
+            <!-- 1. Horizontal Steel Drive Shaft with Attached Realistic Front Fan & 3 Blue Rotation Dots -->
+            <div class="motor-shaft-horizontal">
+              <div class="motor-shaft-steel">
+                <div class="motor-shaft-reflection"></div>
+                <div class="motor-shaft-tip"></div>
               </div>
-              <div class="motor-shaft-center"></div>
+
+              <!-- Front Fan Assembly (Mechanically attached to shaft end, shares single rotation container) -->
+              <div class="motor-fan-mount">
+                <div class="motor-rotor-blades" id="motor-rotor-${comp.id}">
+                  <!-- Central Hub -->
+                  <div class="motor-fan-hub">
+                    <div class="motor-fan-hub-pin"></div>
+                  </div>
+                  <!-- Realistic 3 Blades (120 deg apart) -->
+                  <div class="motor-fan-blade blade-1"></div>
+                  <div class="motor-fan-blade blade-2"></div>
+                  <div class="motor-fan-blade blade-3"></div>
+                  <!-- 3 Blue Rotation Indicator Dots (120 deg apart) -->
+                  <div class="motor-rot-dot dot-1"></div>
+                  <div class="motor-rot-dot dot-2"></div>
+                  <div class="motor-rot-dot dot-3"></div>
+                </div>
+              </div>
             </div>
-            <div class="motor-vents">
-              <div class="motor-vent"></div>
-              <div class="motor-vent"></div>
-              <div class="motor-vent"></div>
+
+            <!-- 2. Front End Bell & Bearing Boss -->
+            <div class="motor-front-bell">
+              <div class="motor-bearing-boss"></div>
+              <div class="motor-front-step"></div>
+            </div>
+
+            <!-- 3. Long Cylindrical Stamped Metal Can Body (Aspect Ratio ~2.35 : 1) -->
+            <div class="motor-metal-can">
+              <div class="motor-can-reflection"></div>
+              <div class="motor-can-seam"></div>
+              <div class="motor-can-crimp crimp-front"></div>
+              <div class="motor-can-vent vent-1"></div>
+              <div class="motor-can-vent vent-2"></div>
+              <div class="motor-can-crimp crimp-rear"></div>
+            </div>
+
+            <!-- 4. Rear End Cap (Dark molded composite) -->
+            <div class="motor-rear-cap">
+              <div class="motor-rear-seam"></div>
+              <div class="motor-brush-bulge"></div>
             </div>
           </div>
-          <div class="motor-label" id="motor-lbl-${comp.id}">${v}V (${rpm} RPM)</div>
+
+          <!-- 5. Electrical Contact Straps connecting rear section to fixed terminals -->
+          <div class="motor-terminal-straps">
+            <!-- Insulated Contact Strap to Positive Terminal at (20, 80) -->
+            <div class="motor-contact-strap-pos"></div>
+            <!-- Contact Tab to Negative Terminal at (100, 80) -->
+            <div class="motor-contact-tab-neg"></div>
+          </div>
+
+          <!-- Fixed Electrical Terminal Lug Hardware (+ at 20, 80 / - at 100, 80) -->
+          <div class="motor-terminal-hardware motor-terminal-pos">
+            <div class="motor-terminal-collar motor-collar-pos">
+              <div class="motor-terminal-stud"></div>
+            </div>
+            <span class="motor-polarity-mark motor-polarity-pos">+</span>
+          </div>
+
+          <div class="motor-terminal-hardware motor-terminal-neg">
+            <div class="motor-terminal-collar motor-collar-neg">
+              <div class="motor-terminal-stud"></div>
+            </div>
+            <span class="motor-polarity-mark motor-polarity-neg">-</span>
+          </div>
+
+          <!-- Compact Digital RPM Instrument Badge (Safely positioned above-right) -->
           <div class="motor-rpm-badge" id="motor-rpm-${comp.id}">
             <span class="rpm-number">${comp.properties.currentRpm || 0}</span> <span class="rpm-unit">RPM</span>
           </div>
+
+          <!-- Specification Label (Positioned cleanly below, non-interfering) -->
+          <div class="motor-label" id="motor-lbl-${comp.id}">${v}V (${rpm} RPM)</div>
         </div>
       `;
     } else if (comp.type === "diode") {
@@ -1358,8 +1610,16 @@ export class ComponentEngine {
       if (lbl) lbl.textContent = `${comp.properties.powerRating}W / ${comp.properties.nominalVoltage}V`;
     } else if (comp.type === "led") {
       const lbl = el.querySelector(`#led-lbl-${comp.id}`) || el.querySelector(".led-label");
-      const vf = comp.properties?.forwardVoltage || 2;
-      if (lbl) lbl.textContent = comp.properties?.label || `LED ${vf}V`;
+      const vis = el.querySelector(`#led-vis-${comp.id}`) || el.querySelector(".led-visual");
+      const colorKey = comp.properties?.ledColor || "red";
+      const preset = LED_PRESETS[colorKey] || LED_PRESETS.red;
+      const vf = comp.properties?.forwardVoltage ?? preset.forwardVoltage;
+      const text = comp.properties?.label || preset.label || `LED ${vf}V`;
+      if (lbl) lbl.textContent = text;
+      if (vis) {
+        Object.keys(LED_PRESETS).forEach(c => vis.classList.remove(`led-color-${c}`));
+        vis.classList.add(`led-color-${colorKey}`);
+      }
     } else if (comp.type === "multimeter") {
       const powerOn = comp.properties.powerOn !== false;
       const holdEnabled = comp.properties.holdEnabled === true;
@@ -1476,6 +1736,18 @@ export class ComponentEngine {
           biasBadge.classList.add("bias-idle");
           biasStatus.textContent = "STANDBY";
         }
+      }
+    } else if (comp.type === "led") {
+      const lbl = el.querySelector(`#led-lbl-${comp.id}`) || el.querySelector(".led-label");
+      const vis = el.querySelector(`#led-vis-${comp.id}`) || el.querySelector(".led-visual");
+      const colorKey = comp.properties?.ledColor || "red";
+      const preset = LED_PRESETS[colorKey] || LED_PRESETS.red;
+      const vf = comp.properties?.forwardVoltage ?? preset.forwardVoltage;
+      const text = comp.properties?.label || preset.label || `LED ${vf}V`;
+      if (lbl) lbl.textContent = text;
+      if (vis) {
+        Object.keys(LED_PRESETS).forEach(c => vis.classList.remove(`led-color-${c}`));
+        vis.classList.add(`led-color-${colorKey}`);
       }
     }
   }
@@ -2032,6 +2304,116 @@ export class ComponentEngine {
       stateManager.updateComponentProperty(comp.id, "model", model);
       stateManager.updateComponentProperty(comp.id, "forwardVoltage", vf);
       close();
+    });
+  }
+
+  openLedModal(comp) {
+    // Ensure any existing LED popover is removed
+    const existing = document.getElementById("led-color-popover-container");
+    if (existing) existing.remove();
+
+    const currentColor = comp.properties?.ledColor || "red";
+    const popover = document.createElement("div");
+    popover.id = "led-color-popover-container";
+    popover.className = "led-color-popover";
+
+    let buttonsHtml = "";
+    Object.keys(LED_PRESETS).forEach((key) => {
+      const p = LED_PRESETS[key];
+      const isSelected = key === currentColor;
+      buttonsHtml += `
+        <button type="button" class="led-color-option ${isSelected ? 'selected' : ''}" data-color="${key}">
+          <span class="led-color-swatch" style="background-color: ${p.swatchHex};"></span>
+          <span class="led-color-name">${p.name} (${p.forwardVoltage}V)</span>
+          <span class="led-color-check">${isSelected ? '✓' : ''}</span>
+        </button>
+      `;
+    });
+
+    popover.innerHTML = `
+      <div class="led-popover-header">
+        <span class="led-popover-title">Pilih Warna LED</span>
+        <button type="button" class="led-popover-close-btn" title="Tutup">✕</button>
+      </div>
+      <div class="led-popover-body">
+        ${buttonsHtml}
+      </div>
+    `;
+
+    // Position near the LED component on screen
+    const compEl = document.getElementById(`comp-${comp.id}`);
+    if (compEl) {
+      const rect = compEl.getBoundingClientRect();
+      const popoverWidth = 200;
+      const popoverHeight = 240;
+
+      let left = rect.right + 10;
+      let top = rect.top - 20;
+
+      // Flip left if off-screen right
+      if (left + popoverWidth > window.innerWidth - 10) {
+        left = Math.max(10, rect.left - popoverWidth - 10);
+      }
+      // Clamp vertically to screen bounds
+      if (top + popoverHeight > window.innerHeight - 10) {
+        top = Math.max(10, window.innerHeight - popoverHeight - 10);
+      }
+      if (top < 10) top = 10;
+
+      popover.style.left = `${Math.round(left)}px`;
+      popover.style.top = `${Math.round(top)}px`;
+    } else {
+      popover.style.left = "50%";
+      popover.style.top = "50%";
+      popover.style.transform = "translate(-50%, -50%)";
+    }
+
+    document.body.appendChild(popover);
+
+    const close = () => {
+      window.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      popover.remove();
+    };
+
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") {
+        close();
+      }
+    };
+
+    const onPointerDown = (e) => {
+      if (!popover.contains(e.target)) {
+        close();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    // Use timeout so current click doesn't trigger immediate close
+    setTimeout(() => {
+      document.addEventListener("pointerdown", onPointerDown, true);
+    }, 50);
+
+    const closeBtn = popover.querySelector(".led-popover-close-btn");
+    if (closeBtn) closeBtn.addEventListener("click", close);
+
+    popover.querySelectorAll(".led-color-option").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const selectedColor = btn.getAttribute("data-color");
+        const preset = LED_PRESETS[selectedColor] || LED_PRESETS.red;
+
+        stateManager.recordHistory();
+        stateManager.updateComponentProperty(comp.id, "ledColor", selectedColor);
+        stateManager.updateComponentProperty(comp.id, "forwardVoltage", preset.forwardVoltage);
+        stateManager.updateComponentProperty(comp.id, "label", preset.label);
+        
+        // Trigger circuit re-solve and notification
+        stateManager.notify("components");
+        stateManager.notify("simulation");
+
+        close();
+      });
     });
   }
 

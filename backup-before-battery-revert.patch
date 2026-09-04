@@ -1,0 +1,727 @@
+diff --git a/public/css/components.css b/public/css/components.css
+index a8cbf10..e771dd7 100644
+--- a/public/css/components.css
++++ b/public/css/components.css
+@@ -244,7 +244,7 @@ .resistor-label {
+ }
+ 
+ /* --------------------------------------------------------------------------
+-   B. REALISTIC LAMP & DYNAMIC GLOW
++   B. REALISTIC LAMP & DYNAMIC GLOW (E10 Incandescent Laboratory Lamp Pass 2)
+    -------------------------------------------------------------------------- */
+ .lamp-visual {
+   width: 100%;
+@@ -260,36 +260,185 @@ .lamp-visual {
+ .lamp-bulb {
+   width: 58px;
+   height: 58px;
+-  border-radius: 50% 50% 40% 40%;
+-  background: radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.98), rgba(241, 245, 249, 0.7) 60%, rgba(203, 213, 225, 0.5) 100%);
+-  border: 1.5px solid rgba(148, 163, 184, 0.7);
++  border-radius: 50% 50% 42% 42%;
++  /* True transparent laboratory glass shell: highly transparent center so workspace grid is visible */
++  background: radial-gradient(
++    circle at 38% 34%,
++    rgba(255, 255, 255, 0.22) 0%,
++    rgba(240, 244, 248, 0.05) 32%,
++    rgba(203, 213, 225, 0.08) 62%,
++    rgba(148, 163, 184, 0.26) 86%,
++    rgba(100, 116, 139, 0.44) 100%
++  );
++  border: 1.5px solid rgba(148, 163, 184, 0.55);
+   position: relative;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+-  transition: all 0.15s ease;
+-  z-index: 2;
++  box-shadow: 
++    0 4px 10px rgba(0, 0, 0, 0.2),
++    inset 0 1.5px 2px rgba(255, 255, 255, 0.7),
++    inset 0 -3px 6px rgba(51, 65, 85, 0.28);
++  transition: all 0.2s ease;
++  z-index: 3;
++  overflow: visible;
++}
++
++/* Internal illumination layer centered on filament */
++.lamp-internal-glow {
++  position: absolute;
++  width: 46px;
++  height: 46px;
++  border-radius: 50%;
++  top: 50%;
++  left: 50%;
++  transform: translate(-50%, -50%) scale(0.7);
++  background: radial-gradient(
++    circle,
++    rgba(255, 255, 255, 0.95) 0%,
++    rgba(254, 240, 138, 0.8) 25%,
++    rgba(245, 158, 11, 0.45) 55%,
++    rgba(217, 119, 6, 0) 100%
++  );
++  opacity: 0;
++  transition: opacity 0.2s ease, transform 0.2s ease;
++  pointer-events: none;
++  z-index: 1;
+ }
+ 
+ .lamp-filament {
+-  width: 20px;
+-  height: 18px;
+-  border: 2px solid #64748b;
+-  border-bottom: none;
+-  border-radius: 10px 10px 0 0;
+-  position: relative;
+-  transition: all 0.15s ease;
++  position: absolute;
++  inset: 0;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  z-index: 2;
++  pointer-events: none;
+ }
+ 
++.lamp-filament-svg {
++  width: 58px;
++  height: 58px;
++  display: block;
++  overflow: visible;
++}
++
++/* Glass Specular Highlights */
++.glass-refl-primary {
++  filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.5));
++  transition: stroke 0.2s ease;
++}
++
++.glass-refl-secondary {
++  transition: stroke 0.2s ease;
++}
++
++/* Stem Glass & Lead Wires */
++.stem-glass-tube {
++  transition: fill 0.2s ease, stroke 0.2s ease;
++}
++
++.stem-lead-wire {
++  transition: stroke 0.2s ease;
++}
++
++/* Physical Support Wires */
++.support-wire {
++  transition: stroke 0.2s ease, filter 0.2s ease;
++}
++
++/* Physical Coiled Tungsten Filament */
++.filament-coil {
++  transition: stroke 0.2s ease, filter 0.2s ease;
++}
++
++/* Tapered Glass Neck Connecting Globe to Metal Base */
++.lamp-glass-neck {
++  width: 22px;
++  height: 6px;
++  margin-top: -3px;
++  margin-bottom: -4px;
++  background: linear-gradient(
++    90deg,
++    rgba(100, 116, 139, 0.45) 0%,
++    rgba(203, 213, 225, 0.25) 20%,
++    rgba(255, 255, 255, 0.5) 35%,
++    rgba(226, 232, 240, 0.2) 60%,
++    rgba(100, 116, 139, 0.5) 100%
++  );
++  border-left: 1.5px solid rgba(148, 163, 184, 0.55);
++  border-right: 1.5px solid rgba(148, 163, 184, 0.55);
++  border-radius: 1.5px;
++  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.55), inset 0 -1px 2px rgba(0, 0, 0, 0.25);
++  z-index: 2;
++  pointer-events: none;
++}
++
++/* Threaded Metal Socket Base */
+ .lamp-base {
+   width: 28px;
+   height: 18px;
+-  background: repeating-linear-gradient(180deg, #94a3b8, #94a3b8 3px, #64748b 3px, #64748b 6px);
++  margin-top: -1px;
++  background: linear-gradient(
++    90deg,
++    #475569 0%,
++    #64748b 12%,
++    #94a3b8 28%,
++    #cbd5e1 45%,
++    #f1f5f9 55%,
++    #94a3b8 75%,
++    #475569 92%,
++    #334155 100%
++  );
+   border-radius: 0 0 6px 6px;
+-  border: 1px solid #475569;
++  border: 1px solid #334155;
++  box-shadow: 
++    0 3px 6px rgba(0, 0, 0, 0.35),
++    inset 0 1.5px 1px rgba(255, 255, 255, 0.6),
++    inset 0 -2px 3px rgba(15, 23, 42, 0.5);
+   z-index: 1;
+-  margin-top: -5px;
++  position: relative;
++}
++
++.lamp-base-rim {
++  position: absolute;
++  top: 0;
++  left: 0;
++  right: 0;
++  height: 2px;
++  background: linear-gradient(90deg, #64748b 0%, #e2e8f0 50%, #475569 100%);
++  border-radius: 1px 1px 0 0;
++}
++
++.lamp-base-threads {
++  position: absolute;
++  top: 2px;
++  left: 0;
++  right: 0;
++  bottom: 0;
++  background: repeating-linear-gradient(
++    180deg,
++    rgba(255, 255, 255, 0.35) 0px,
++    rgba(255, 255, 255, 0.35) 1px,
++    transparent 1px,
++    transparent 3px,
++    rgba(15, 23, 42, 0.55) 3px,
++    rgba(15, 23, 42, 0.55) 5px
++  );
++  pointer-events: none;
++}
++
++.lamp-base-contact {
++  position: absolute;
++  bottom: -3px;
++  left: 50%;
++  transform: translateX(-50%);
++  width: 12px;
++  height: 3.5px;
++  background: #0f172a;
++  border-radius: 0 0 3px 3px;
++  border: 1px solid #020617;
++  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.2);
+ }
+ 
+ .lamp-leads-container {
+@@ -324,21 +473,54 @@ .lamp-lead-right {
+   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+ }
+ 
+-.workspace-component.comp-lamp.lit .lamp-bulb,
+-.workspace-component.lit .lamp-bulb,
+-.lamp-visual.lit .lamp-bulb {
+-  background: radial-gradient(circle at 45% 45%, #ffffff 0%, #fef08a 35%, #f59e0b 100%) !important;
+-  border-color: #facc15 !important;
+-  box-shadow: 0 0 calc(25px + 30px * var(--glow-intensity, 1)) rgba(245, 158, 11, var(--glow-intensity, 0.9)),
+-              0 0 calc(50px + 50px * var(--glow-intensity, 1)) rgba(250, 204, 21, var(--glow-intensity, 0.7)),
+-              0 0 calc(80px + 80px * var(--glow-intensity, 1)) rgba(253, 224, 71, var(--glow-intensity, 0.5)) !important;
++/* --------------------------------------------------------------------------
++   LIT / POWERED STATE: Realistic Layered Illumination
++   Filament Glow -> Internal Glass Glow -> Controlled Soft Halo
++   -------------------------------------------------------------------------- */
++.workspace-component.comp-lamp.lit .lamp-internal-glow,
++.lamp-visual.lit .lamp-internal-glow {
++  opacity: calc(0.25 + 0.75 * min(var(--glow-intensity, 1), 1));
++  transform: translate(-50%, -50%) scale(calc(0.65 + 0.35 * min(var(--glow-intensity, 1), 1.15)));
+ }
+ 
+-.workspace-component.comp-lamp.lit .lamp-filament,
+-.workspace-component.lit .lamp-filament,
+-.lamp-visual.lit .lamp-filament {
+-  border-color: #ffffff !important;
+-  box-shadow: 0 0 12px #ffffff, 0 0 24px #fef08a !important;
++.workspace-component.comp-lamp.lit .filament-coil,
++.lamp-visual.lit .filament-coil {
++  stroke: #ffffff !important;
++  /* Concentrated filament emission: white-hot central core + warm yellow center + orange edge */
++  filter: drop-shadow(0 0 calc(1.5px + 1.5px * var(--glow-intensity, 1)) #ffffff)
++          drop-shadow(0 0 calc(3.5px + 3.5px * var(--glow-intensity, 1)) #fef08a)
++          drop-shadow(0 0 calc(7px + 6px * var(--glow-intensity, 1)) #ea580c) !important;
++}
++
++.workspace-component.comp-lamp.lit .support-wire,
++.lamp-visual.lit .support-wire {
++  stroke: #fef08a !important;
++  filter: drop-shadow(0 0 2.5px #ea580c) !important;
++}
++
++.workspace-component.comp-lamp.lit .stem-lead-wire,
++.lamp-visual.lit .stem-lead-wire {
++  stroke: #94a3b8 !important;
++}
++
++.workspace-component.comp-lamp.lit .glass-refl-primary,
++.lamp-visual.lit .glass-refl-primary {
++  stroke: #fffbeb !important;
++  filter: drop-shadow(0 0 1.5px rgba(254, 240, 138, 0.5)) !important;
++}
++
++.workspace-component.comp-lamp.lit .lamp-bulb,
++.lamp-visual.lit .lamp-bulb {
++  /* Retain visible glass envelope boundary with subtle warm rim tint */
++  border-color: rgba(180, 160, 120, calc(0.45 + 0.3 * var(--glow-intensity, 1))) !important;
++  /* Warm outer halo tuned (+15% to +25% at nominal power, soft decay into workspace) */
++  box-shadow: 
++    0 0 calc(8px + 14px * var(--glow-intensity, 1)) rgba(245, 158, 11, calc(0.44 * var(--glow-intensity, 1))),
++    0 0 calc(16px + 22px * var(--glow-intensity, 1)) rgba(250, 204, 21, calc(0.22 * var(--glow-intensity, 1))),
++    0 0 calc(28px + 28px * var(--glow-intensity, 1)) rgba(251, 191, 36, calc(0.12 * var(--glow-intensity, 1))),
++    inset 0 0 calc(6px + 8px * var(--glow-intensity, 1)) rgba(254, 240, 138, calc(0.42 * var(--glow-intensity, 1))),
++    inset 0 1.5px 2px rgba(255, 255, 255, 0.85),
++    inset 0 -2px 4px rgba(71, 85, 105, 0.3) !important;
+ }
+ 
+ .lamp-label {
+@@ -355,7 +537,7 @@ .lamp-label {
+ }
+ 
+ /* --------------------------------------------------------------------------
+-   C. REALISTIC BATTERY
++   C. REALISTIC INDUSTRIAL 12V BATTERY PACK (Micro-Polished)
+    -------------------------------------------------------------------------- */
+ .battery-visual {
+   width: 100%;
+@@ -365,64 +547,275 @@ .battery-visual {
+   align-items: center;
+   justify-content: center;
+   pointer-events: none;
++  box-sizing: border-box;
+ }
+ 
+-.battery-body {
+-  width: 115px;
+-  height: 54px;
+-  background: linear-gradient(180deg, #1e293b 0%, #0f172a 70%, #020617 100%);
+-  border-radius: 8px;
+-  border: 2px solid #334155;
+-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
++/* Main Industrial Battery Pack Casing (106px x 62px, centered at 70, 40) */
++.battery-casing {
++  position: absolute;
++  left: 50%;
++  top: 50%;
++  transform: translate(-50%, -50%);
++  width: 106px;
++  height: 62px;
++  /* Dark charcoal industrial matte composite plastic with upper-left illumination */
++  background: linear-gradient(145deg, #27272a 0%, #1c1c1f 45%, #101012 100%);
++  border-radius: 6px;
++  border-top: 1.5px solid #4b5563;
++  border-left: 1.5px solid #374151;
++  border-right: 1.5px solid #111827;
++  border-bottom: 1.5px solid #030712;
++  /* Grounded physical shadow with reduced blur/opacity */
++  box-shadow: 
++    0 3px 8px rgba(0, 0, 0, 0.38),
++    inset 0 1px 1px rgba(255, 255, 255, 0.12),
++    inset 0 -1.5px 3px rgba(0, 0, 0, 0.55);
+   display: flex;
+-  align-items: center;
++  flex-direction: column;
+   justify-content: space-between;
+-  padding: 0 14px;
+-  position: relative;
++  padding: 3px 6px;
++  box-sizing: border-box;
++  z-index: 2;
+ }
+ 
+-.battery-stripe {
+-  position: absolute;
+-  top: 0;
+-  bottom: 0;
+-  left: 22px;
+-  width: 14px;
+-  background: linear-gradient(180deg, #0284c7, #38bdf8);
++/* Top Structural Molding & Subtle Molded Seam */
++.battery-casing-header {
++  width: 100%;
++  height: 4px;
++  position: relative;
++  display: flex;
++  align-items: center;
+ }
+ 
+-.battery-pole-neg {
+-  font-size: 18px;
+-  font-weight: 900;
+-  color: #94a3b8;
+-  font-family: var(--font-mono);
++.battery-casing-seam {
++  width: 100%;
++  height: 1px;
++  background: linear-gradient(90deg, #18181b 0%, #3f3f46 25%, #52525b 50%, #3f3f46 75%, #18181b 100%);
++  border-radius: 0.5px;
+ }
+ 
+-.battery-center-label {
++/* Recessed Industrial Spec Plate with Clear 3-Tier Hierarchy */
++.battery-label-plate {
++  width: 100%;
++  height: 42px;
++  background: linear-gradient(180deg, #09090b 0%, #121214 100%);
++  border-radius: 4px;
++  border: 1px solid rgba(255, 255, 255, 0.06);
++  border-bottom-color: rgba(255, 255, 255, 0.02);
++  box-shadow: 
++    inset 0 1.5px 3px rgba(0, 0, 0, 0.65),
++    0 1px 1px rgba(255, 255, 255, 0.03);
+   display: flex;
+   flex-direction: column;
+   align-items: center;
+-  z-index: 2;
++  justify-content: space-evenly;
++  padding: 2px 6px;
++  box-sizing: border-box;
++}
++
++/* Secondary Subhead: DC POWER PACK */
++.battery-spec-subhead {
++  width: 100%;
++  display: flex;
++  justify-content: center;
++  align-items: center;
++  line-height: 1;
++}
++
++.battery-spec-tech {
++  font-size: 6px;
++  font-weight: 600;
++  color: #71717a;
++  letter-spacing: 0.1em;
++  text-transform: uppercase;
++  font-family: var(--font-mono);
++}
++
++/* Primary Label: 12V BATTERY (Strongest visual anchor) */
++.battery-primary-label {
++  display: flex;
++  align-items: baseline;
++  justify-content: center;
++  gap: 4px;
++  line-height: 1;
++  margin: 1px 0;
+ }
+ 
+ .battery-volt-text {
+-  font-size: 14px;
++  font-size: 13.5px;
+   font-weight: 800;
+-  color: #f8fafc;
++  color: #ffffff;
+   font-family: var(--font-mono);
++  letter-spacing: 0.04em;
++  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+ }
+ 
+-.battery-type-text {
+-  font-size: 8px;
+-  font-weight: 600;
+-  color: #38bdf8;
+-  letter-spacing: 0.05em;
++.battery-unit-text {
++  font-size: 10.5px;
++  font-weight: 700;
++  color: #e2e8f0;
++  letter-spacing: 0.06em;
++  font-family: var(--font-mono);
+ }
+ 
+-.battery-pole-pos {
+-  font-size: 18px;
++/* Tertiary Technical Marking: Low-contrast printed text */
++.battery-tertiary-footer {
++  width: 100%;
++  display: flex;
++  justify-content: center;
++  align-items: center;
++  line-height: 1;
++}
++
++.battery-tech-marking {
++  font-size: 5px;
++  font-weight: 500;
++  color: #52525b;
++  letter-spacing: 0.08em;
++  font-family: var(--font-mono);
++  text-transform: uppercase;
++}
++
++/* Bottom Structural Molding & Grip Ridges */
++.battery-casing-footer {
++  width: 100%;
++  height: 4px;
++  display: flex;
++  justify-content: center;
++  align-items: center;
++  gap: 4px;
++}
++
++.battery-grip-ridge {
++  width: 8px;
++  height: 1.5px;
++  background: #18181b;
++  border-top: 0.5px solid #3f3f46;
++  border-radius: 1px;
++}
++
++/* Corner Notches */
++.battery-corner-notch {
++  position: absolute;
++  width: 2px;
++  height: 2px;
++  background: #18181b;
++}
++.notch-tl { top: -2px; left: 1px; }
++.notch-tr { top: -2px; right: 1px; }
++.notch-bl { bottom: -2px; left: 1px; }
++.notch-br { bottom: -2px; right: 1px; }
++
++/* --------------------------------------------------------------------------
++   Hardware Terminal Lugs & Bushings
++   Left (-) centered exactly on (10, 40)
++   Right (+) centered exactly on (130, 40)
++   -------------------------------------------------------------------------- */
++.battery-terminal-hardware {
++  position: absolute;
++  top: 40px;
++  width: 18px;
++  height: 18px;
++  transform: translate(-50%, -50%);
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  pointer-events: none;
++  z-index: 3;
++}
++
++.terminal-hardware-neg {
++  left: 10px;
++}
++
++.terminal-hardware-pos {
++  left: 130px;
++}
++
++/* Metal Connecting Bracket reaching into the casing */
++.terminal-bracket {
++  position: absolute;
++  top: 50%;
++  transform: translateY(-50%);
++  height: 6px;
++  background: linear-gradient(180deg, #52525b 0%, #3f3f46 50%, #18181b 100%);
++  border: 0.5px solid #09090b;
++  z-index: 1;
++}
++
++.bracket-neg {
++  right: -7px;
++  width: 9px;
++  border-radius: 0 2px 2px 0;
++}
++
++.bracket-pos {
++  left: -7px;
++  width: 9px;
++  border-radius: 2px 0 0 2px;
++}
++
++/* Heavy-duty Industrial Bushing / Collar */
++.terminal-collar {
++  width: 14px;
++  height: 14px;
++  border-radius: 3px;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  position: relative;
++  z-index: 2;
++}
++
++.collar-neg {
++  background: radial-gradient(circle at 35% 35%, #3f3f46 0%, #27272a 50%, #18181b 100%);
++  border: 1px solid #09090b;
++  box-shadow: 
++    0 2px 4px rgba(0, 0, 0, 0.45),
++    inset 0 1px 1px rgba(255, 255, 255, 0.18),
++    inset 0 -1px 1px rgba(0, 0, 0, 0.5);
++}
++
++.collar-pos {
++  background: radial-gradient(circle at 35% 35%, #ef4444 0%, #dc2626 50%, #991b1b 100%);
++  border: 1px solid #7f1d1d;
++  box-shadow: 
++    0 2px 4px rgba(0, 0, 0, 0.45),
++    inset 0 1px 1px rgba(255, 255, 255, 0.35),
++    inset 0 -1px 1px rgba(0, 0, 0, 0.5);
++}
++
++/* Brushed Silver-Nickel Contact Stud (Not Shiny Chrome) */
++.terminal-metallic-stud {
++  width: 6px;
++  height: 6px;
++  border-radius: 50%;
++  background: radial-gradient(circle at 35% 35%, #e2e8f0 0%, #94a3b8 55%, #475569 100%);
++  box-shadow: 
++    inset 0 0.8px 1px rgba(255, 255, 255, 0.7),
++    0 1px 2px rgba(0, 0, 0, 0.35);
++  border: 0.5px solid #334155;
++}
++
++/* Polarity Marks (+ / -) Perfectly Aligned with Terminals */
++.battery-polarity-mark {
++  position: absolute;
++  top: -16px;
++  left: 50%;
++  transform: translateX(-50%);
++  font-family: var(--font-mono);
++  font-size: 14px;
+   font-weight: 900;
++  line-height: 1;
++  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
++}
++
++.polarity-neg {
++  color: #cbd5e1;
++}
++
++.polarity-pos {
+   color: #ef4444;
+-  font-family: var(--font-mono);
+ }
+ 
+ /* --------------------------------------------------------------------------
+diff --git a/public/js/components.js b/public/js/components.js
+index 8387428..5fbc070 100644
+--- a/public/js/components.js
++++ b/public/js/components.js
+@@ -1075,15 +1075,61 @@ export class ComponentEngine {
+   getComponentInnerHTML(comp) {
+     if (comp.type === "battery") {
+       return `
+-        <div class="battery-visual">
+-          <div class="battery-body">
+-            <div class="battery-stripe"></div>
+-            <span class="battery-pole-neg">-</span>
+-            <div class="battery-center-label">
+-              <span class="battery-volt-text" id="volt-text-${comp.id}">${comp.properties.voltage}V</span>
+-              <span class="battery-type-text">DC POWER</span>
++        <div class="battery-visual" id="battery-vis-${comp.id}">
++          <!-- Negative Terminal Hardware Lug centered at (10, 40) -->
++          <div class="battery-terminal-hardware terminal-hardware-neg">
++            <div class="terminal-bracket bracket-neg"></div>
++            <div class="terminal-collar collar-neg">
++              <div class="terminal-metallic-stud"></div>
+             </div>
+-            <span class="battery-pole-pos">+</span>
++            <span class="battery-polarity-mark polarity-neg">-</span>
++          </div>
++
++          <!-- Main Industrial Battery Pack Casing (106px x 62px, centered at 70, 40) -->
++          <div class="battery-casing">
++            <!-- Top Structural Header with Molded Seam -->
++            <div class="battery-casing-header">
++              <div class="battery-casing-seam"></div>
++              <div class="battery-corner-notch notch-tl"></div>
++              <div class="battery-corner-notch notch-tr"></div>
++            </div>
++
++            <!-- Recessed Industrial Spec Plate (Clear 3-Tier Hierarchy) -->
++            <div class="battery-label-plate">
++              <!-- Secondary: DC POWER PACK -->
++              <div class="battery-spec-subhead">
++                <span class="battery-spec-tech">DC POWER PACK</span>
++              </div>
++
++              <!-- Primary: 12V BATTERY (Strongest visual anchor) -->
++              <div class="battery-primary-label">
++                <span class="battery-volt-text" id="volt-text-${comp.id}">${comp.properties.voltage}V</span>
++                <span class="battery-unit-text">BATTERY</span>
++              </div>
++
++              <!-- Tertiary: Subtle technical printed marking -->
++              <div class="battery-tertiary-footer">
++                <span class="battery-tech-marking">SEALED RECHARGEABLE CELL</span>
++              </div>
++            </div>
++
++            <!-- Bottom Structural Footer & Grip Ridges -->
++            <div class="battery-casing-footer">
++              <div class="battery-grip-ridge"></div>
++              <div class="battery-grip-ridge"></div>
++              <div class="battery-grip-ridge"></div>
++              <div class="battery-corner-notch notch-bl"></div>
++              <div class="battery-corner-notch notch-br"></div>
++            </div>
++          </div>
++
++          <!-- Positive Terminal Hardware Lug centered at (130, 40) -->
++          <div class="battery-terminal-hardware terminal-hardware-pos">
++            <div class="terminal-bracket bracket-pos"></div>
++            <div class="terminal-collar collar-pos">
++              <div class="terminal-metallic-stud"></div>
++            </div>
++            <span class="battery-polarity-mark polarity-pos">+</span>
+           </div>
+         </div>
+       `;
+@@ -1114,9 +1160,33 @@ export class ComponentEngine {
+       return `
+         <div class="lamp-visual" id="lamp-vis-${comp.id}">
+           <div class="lamp-bulb" id="lamp-bulb-${comp.id}">
+-            <div class="lamp-filament"></div>
++            <div class="lamp-internal-glow"></div>
++            <div class="lamp-filament">
++              <svg class="lamp-filament-svg" viewBox="0 0 58 58" width="58" height="58">
++                <!-- Primary & Secondary Curved Glass Specular Reflections -->
++                <path class="glass-refl-primary" d="M 13 26 C 12 18, 18 12, 27 10" fill="none" stroke="rgba(255,255,255,0.75)" stroke-width="1.8" stroke-linecap="round" />
++                <path class="glass-refl-secondary" d="M 12 31 C 11.5 28.5, 12 26.5, 13 25" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1.3" stroke-linecap="round" />
++                
++                <!-- Internal Mount Stem (Glass Tube & Lead Wires) -->
++                <path class="stem-glass-tube" d="M 24 58 L 24 46 Q 29 44 34 46 L 34 58 Z" fill="rgba(203,213,225,0.22)" stroke="rgba(148,163,184,0.35)" stroke-width="0.75" />
++                <line class="stem-lead-wire" x1="26" y1="56" x2="26" y2="42" stroke="#64748b" stroke-width="1.2" stroke-linecap="round" />
++                <line class="stem-lead-wire" x1="32" y1="56" x2="32" y2="42" stroke="#64748b" stroke-width="1.2" stroke-linecap="round" />
++
++                <!-- Thin Support Wires Rising from Stem with Terminal Hooks -->
++                <path class="support-wire support-wire-l" d="M 26 42 L 22 25 L 23.5 24" fill="none" stroke="#475569" stroke-width="1.1" stroke-linecap="round" />
++                <path class="support-wire support-wire-r" d="M 32 42 L 36 25 L 34.5 24" fill="none" stroke="#475569" stroke-width="1.1" stroke-linecap="round" />
++
++                <!-- Coiled Tungsten Filament Arch between Hooks -->
++                <path class="filament-coil" d="M 23.5 24 q 1.2 -2.2, 2.2 0 q 1.2 -2.2, 2.2 0 q 1.2 -2.2, 2.2 0 q 1.2 -2.2, 2.2 0 q 1.2 -2.2, 2.2 0 q 1.2 -2.2, 2.2 0" fill="none" stroke="#334155" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" />
++              </svg>
++            </div>
++          </div>
++          <div class="lamp-glass-neck"></div>
++          <div class="lamp-base">
++            <div class="lamp-base-rim"></div>
++            <div class="lamp-base-threads"></div>
++            <div class="lamp-base-contact"></div>
+           </div>
+-          <div class="lamp-base"></div>
+           <div class="lamp-leads-container">
+             <div class="lamp-lead-wire lamp-lead-left"></div>
+             <div class="lamp-lead-wire lamp-lead-right"></div>
+diff --git a/public/js/simulation.js b/public/js/simulation.js
+index 97188b9..59ccacc 100644
+--- a/public/js/simulation.js
++++ b/public/js/simulation.js
+@@ -251,8 +251,8 @@ export class SimulationEngine {
+         // Threshold: P <= 0.005 W is treated as OFF
+         if (solvedP > 0.005 && compV > 0.1) {
+           const powerRatio = Math.min(Math.max(solvedP / ratedP, 0), 2.0);
+-          // Gentle visual mapping for educational visibility (dim glow visible at low voltages/powers)
+-          const visualIntensity = Math.min(1.5, Math.max(0.15, Math.sqrt(powerRatio)));
++          // Gentle perceptual curve: powerRatio^0.65 (proportional, dim at low W, nominal at rated 20W)
++          const visualIntensity = Math.min(1.5, Math.max(0.08, Math.pow(powerRatio, 0.65)));
+ 
+           compEl.classList.add("lit");
+           compEl.style.setProperty("--glow-intensity", visualIntensity.toFixed(2));

@@ -251,8 +251,8 @@ export class SimulationEngine {
         // Threshold: P <= 0.005 W is treated as OFF
         if (solvedP > 0.005 && compV > 0.1) {
           const powerRatio = Math.min(Math.max(solvedP / ratedP, 0), 2.0);
-          // Gentle visual mapping for educational visibility (dim glow visible at low voltages/powers)
-          const visualIntensity = Math.min(1.5, Math.max(0.15, Math.sqrt(powerRatio)));
+          // Gentle perceptual curve: powerRatio^0.65 (proportional, dim at low W, nominal at rated 20W)
+          const visualIntensity = Math.min(1.5, Math.max(0.08, Math.pow(powerRatio, 0.65)));
 
           compEl.classList.add("lit");
           compEl.style.setProperty("--glow-intensity", visualIntensity.toFixed(2));
@@ -272,10 +272,36 @@ export class SimulationEngine {
         }
       } else if (comp.type === "led") {
         const vf = Number(comp.properties?.forwardVoltage || 2.0);
-        if (compI > 1e-4 && compV >= vf * 0.9) {
+        const ifNom = Number(comp.properties?.nominalCurrent || 0.020);
+        const ledVis = compEl.querySelector(".led-visual");
+
+        if (compI > 1e-4 && compV >= vf * 0.85) {
+          // Solved current ratio relative to nominal 20mA (display capped at ~1.35 for overcurrent)
+          const currentRatio = Math.min(Math.max(compI / ifNom, 0), 1.4);
+          // Nonlinear display curve (pow 0.6) for realistic perceptual response:
+          // 5mA (~0.25 ratio) -> ~0.43 intensity (dim)
+          // 10mA (~0.50 ratio) -> ~0.66 intensity (medium)
+          // 20mA (1.00 ratio) -> 1.00 intensity (nominal strong)
+          // >25mA (1.25+ ratio) -> capped at ~1.22 intensity
+          const visualIntensity = Math.min(1.35, Math.max(0.12, Math.pow(currentRatio, 0.6)));
+
           compEl.classList.add("lit");
-          const ledVis = compEl.querySelector(".led-visual");
-          if (ledVis) ledVis.classList.add("lit");
+          compEl.style.setProperty("--glow-intensity", visualIntensity.toFixed(2));
+          compEl.style.setProperty("--led-intensity", visualIntensity.toFixed(2));
+          if (ledVis) {
+            ledVis.classList.add("lit");
+            ledVis.style.setProperty("--glow-intensity", visualIntensity.toFixed(2));
+            ledVis.style.setProperty("--led-intensity", visualIntensity.toFixed(2));
+          }
+        } else {
+          compEl.classList.remove("lit");
+          compEl.style.removeProperty("--glow-intensity");
+          compEl.style.removeProperty("--led-intensity");
+          if (ledVis) {
+            ledVis.classList.remove("lit");
+            ledVis.style.removeProperty("--glow-intensity");
+            ledVis.style.removeProperty("--led-intensity");
+          }
         }
       } else if (comp.type === "motor_dc") {
         const motorData = motorResults?.get(comp.id);
@@ -321,6 +347,7 @@ export class SimulationEngine {
     document.querySelectorAll(".workspace-component").forEach(el => {
       el.classList.remove("lit", "spinning");
       el.style.removeProperty("--glow-intensity");
+      el.style.removeProperty("--led-intensity");
       el.style.removeProperty("--spin-speed");
     });
     document.querySelectorAll(".lamp-visual").forEach(el => {
@@ -330,6 +357,7 @@ export class SimulationEngine {
     document.querySelectorAll(".led-visual").forEach(el => {
       el.classList.remove("lit");
       el.style.removeProperty("--glow-intensity");
+      el.style.removeProperty("--led-intensity");
     });
     document.querySelectorAll(".motor-rotor-blades").forEach(el => {
       el.classList.remove("spinning");
