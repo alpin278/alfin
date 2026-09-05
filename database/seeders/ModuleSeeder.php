@@ -31,6 +31,13 @@ class ModuleSeeder extends Seeder
                 'description' => 'Cara kerja Voltmeter (pemasangan paralel), Amperemeter (pemasangan seri), Ohmmeter, serta kalibrasi dan keselamatan kerja.',
                 'icon' => 'gauge',
             ],
+            [
+                'module_number' => 4,
+                'title' => 'Rangkaian Seri & Paralel',
+                'slug' => 'rangkaian-seri-paralel',
+                'description' => 'Analisis karakteristik rangkaian seri dan paralel: pembagian arus dan tegangan, hambatan pengganti (Rtot), serta perilaku sirkuit saat jalur terbuka.',
+                'icon' => 'layers',
+            ],
         ];
 
         foreach ($modules as $mod) {
