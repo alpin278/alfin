@@ -193,7 +193,7 @@
   }
 
   .nav-item.active {
-    color: var(--color-primary-light, #38bdf8);
+    color: var(--color-primary, #2563eb);
   }
 
   /* Glowing Green Active Simulation in Bottom Nav */
@@ -288,15 +288,15 @@
   height: 65vh;
   max-height: 75vh;
   min-height: 320px;
-  background: #0b132b;
-  border-top: 2px solid var(--color-primary-light, #38bdf8);
+  background: var(--color-bg-surface, #ffffff);
+  border-top: 2px solid var(--color-primary, #2563eb);
   border-radius: 20px 20px 0 0;
   padding: 14px 16px 20px;
   z-index: 2000;
-  box-shadow: 0 -12px 36px rgba(0, 0, 0, 0.8);
+  box-shadow: 0 -8px 30px rgba(15, 23, 42, 0.12);
   display: flex;
   flex-direction: column;
-  color: #f8fafc;
+  color: var(--color-text-primary, #0f172a);
   animation: slideUpSheet 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
@@ -314,7 +314,7 @@
 .mobile-sheet-handle {
   width: 42px;
   height: 4px;
-  background: #475569;
+  background: #cbd5e1;
   border-radius: 4px;
   margin: -4px auto 12px;
   flex-shrink: 0;
@@ -335,17 +335,18 @@
 
 .mobile-sheet-search input {
   width: 100%;
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: var(--color-bg-surface-secondary, #f1f5fb);
+  border: 1px solid var(--color-border, #dce5f0);
   border-radius: 8px;
   padding: 8px 12px;
-  color: #f8fafc;
+  color: var(--color-text-primary, #0f172a);
   font-size: 0.85rem;
   outline: none;
+  transition: border-color var(--transition-fast);
 }
 
 .mobile-sheet-search input:focus {
-  border-color: #38bdf8;
+  border-color: var(--color-primary, #2563eb);
 }
 
 .mobile-sheet-scroll {
@@ -369,14 +370,14 @@
 }
 
 .mobile-sheet-scroll::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: #cbd5e1;
   border-radius: 4px;
 }
 
 .mobile-category-title {
   font-size: 0.72rem;
   font-weight: 700;
-  color: #94a3b8;
+  color: var(--color-text-muted, #94a3b8);
   letter-spacing: 0.05em;
   margin-bottom: 6px;
   text-transform: uppercase;
@@ -389,8 +390,8 @@
 }
 
 .mobile-comp-card {
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: var(--color-bg-surface, #ffffff);
+  border: 1px solid var(--color-border, #dce5f0);
   border-radius: 10px;
   padding: 10px 6px;
   display: flex;
@@ -398,21 +399,22 @@
   align-items: center;
   justify-content: center;
   gap: 5px;
-  color: #f8fafc;
+  color: var(--color-text-primary, #0f172a);
   cursor: pointer;
   transition: all 0.15s ease;
   min-height: 72px;
   touch-action: manipulation;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
 }
 
 .mobile-comp-card:active {
-  background: #0284c7;
-  border-color: #38bdf8;
+  background: var(--color-bg-surface-soft, #eaf2ff);
+  border-color: var(--color-primary, #2563eb);
   transform: scale(0.96);
 }
 
 .mobile-comp-card-icon {
-  color: #38bdf8;
+  color: var(--color-primary, #2563eb);
   display: flex;
   align-items: center;
   justify-content: center;

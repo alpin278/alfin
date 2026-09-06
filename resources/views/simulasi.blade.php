@@ -47,7 +47,7 @@
             default => 'Kembali ke Beranda / Dasbor'
           };
         @endphp
-        <a href="{{ $backUrl }}" id="btn-back-nav" class="btn-tool-icon" style="text-decoration: none; color: #38bdf8; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.3);" title="{{ $backTitle }}">
+        <a href="{{ $backUrl }}" id="btn-back-nav" class="btn-tool-icon" style="text-decoration: none; color: var(--color-primary, #2563eb); background: var(--color-primary-subtle, #eaf2ff); border: 1px solid #bfdbfe;" title="{{ $backTitle }}">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <line x1="19" y1="12" x2="5" y2="12"></line>
             <polyline points="12 19 5 12 12 5"></polyline>
@@ -118,7 +118,7 @@
           <button class="btn-step" id="btn-zoom-plus" title="Perbesar">+</button>
         </div>
 
-        <div class="header-tool-divider" style="width: 1px; height: 18px; background: rgba(51, 65, 85, 0.6); margin: 0 1px;"></div>
+        <div class="header-tool-divider" style="width: 1px; height: 18px; background: var(--color-border, #dce5f0); margin: 0 1px;"></div>
 
         <!-- Putar Komponen 90° (Rotate) -->
         <button class="btn-tool-icon" id="btn-rotate-component" title="Putar komponen 90° (Shortcut: R)" disabled>

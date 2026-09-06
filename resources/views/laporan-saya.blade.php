@@ -22,13 +22,14 @@
       margin-bottom: 32px;
     }
     .laporan-stat-card {
-      background: var(--color-bg-card, #1e293b);
-      border: 1px solid var(--color-border, #334155);
+      background: var(--color-bg-surface, #ffffff);
+      border: 1px solid var(--color-border, #dce5f0);
       border-radius: var(--radius-md, 10px);
       padding: 16px 20px;
       display: flex;
       align-items: center;
       gap: 16px;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
     }
     .laporan-stat-icon {
       width: 44px;
@@ -44,44 +45,46 @@
     }
     .laporan-stat-label {
       font-size: 0.76rem;
-      color: #94a3b8;
+      color: var(--color-text-secondary, #64748b);
       font-weight: 500;
     }
     .laporan-stat-val {
       font-size: 1.35rem;
       font-weight: 800;
-      color: #f8fafc;
+      color: var(--color-text-primary, #0f172a);
       font-family: var(--font-mono);
       line-height: 1.2;
     }
     .laporan-section-heading {
       font-size: 1.15rem;
       font-weight: 700;
-      color: #ffffff;
+      color: var(--color-text-primary, #0f172a);
       margin-bottom: 16px;
       display: flex;
       align-items: center;
       gap: 10px;
-      border-left: 4px solid var(--color-primary-blue, #0284c7);
+      border-left: 4px solid var(--color-primary, #2563eb);
       padding-left: 12px;
     }
     .laporan-card {
-      background: var(--color-bg-card, #1e293b);
-      border: 1px solid var(--color-border, #334155);
+      background: var(--color-bg-surface, #ffffff);
+      border: 1px solid var(--color-border, #dce5f0);
       border-radius: var(--radius-md, 10px);
       padding: 20px;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
       gap: 16px;
-      transition: transform 0.2s ease, border-color 0.2s ease;
+      transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
       width: 100%;
       min-width: 0;
       overflow: hidden;
       box-sizing: border-box;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
     }
     .laporan-card:hover {
-      border-color: rgba(56, 189, 248, 0.4);
+      border-color: #93c5fd;
+      box-shadow: 0 6px 16px rgba(37, 99, 235, 0.08);
       transform: translateY(-2px);
     }
     .laporan-card .materi-title {
@@ -113,47 +116,47 @@
     }
     .status-submitted {
       background: rgba(245, 158, 11, 0.15);
-      color: #fbbf24;
+      color: #b45309;
       border: 1px solid rgba(245, 158, 11, 0.35);
     }
     .status-graded {
-      background: rgba(16, 185, 129, 0.15);
-      color: #10b981;
+      background: rgba(16, 185, 129, 0.12);
+      color: #059669;
       border: 1px solid rgba(16, 185, 129, 0.35);
     }
     .status-empty {
       background: rgba(148, 163, 184, 0.12);
-      color: #94a3b8;
-      border: 1px solid #475569;
+      color: #64748b;
+      border: 1px solid #cbd5e1;
     }
     .status-requested {
-      background: rgba(245, 158, 11, 0.2);
-      color: #fbbf24;
+      background: rgba(245, 158, 11, 0.15);
+      color: #b45309;
       border: 1px solid rgba(245, 158, 11, 0.45);
     }
     .status-approved {
-      background: rgba(56, 189, 248, 0.18);
-      color: #38bdf8;
-      border: 1px solid rgba(56, 189, 248, 0.45);
+      background: rgba(37, 99, 235, 0.12);
+      color: #2563eb;
+      border: 1px solid rgba(37, 99, 235, 0.3);
     }
     .status-expired {
-      background: rgba(239, 68, 68, 0.15);
-      color: #f87171;
+      background: rgba(239, 68, 68, 0.12);
+      color: #dc2626;
       border: 1px solid rgba(239, 68, 68, 0.35);
     }
     .reupload-banner {
-      background: rgba(56, 189, 248, 0.1);
-      border: 1px solid rgba(56, 189, 248, 0.3);
+      background: var(--color-bg-surface-soft, #eaf2ff);
+      border: 1px solid rgba(37, 99, 235, 0.25);
       border-radius: 6px;
       padding: 10px 12px;
       margin-top: 10px;
       font-size: 0.78rem;
-      color: #cbd5e1;
+      color: #1e40af;
     }
     .btn-request-edit {
-      background: rgba(168, 85, 247, 0.15);
-      border: 1px solid rgba(168, 85, 247, 0.35);
-      color: #c084fc;
+      background: rgba(168, 85, 247, 0.12);
+      border: 1px solid rgba(168, 85, 247, 0.3);
+      color: #7e22ce;
       font-size: 0.78rem;
       font-weight: 600;
       padding: 7px 10px;
@@ -168,12 +171,12 @@
       flex: 1;
     }
     .btn-request-edit:hover {
-      background: rgba(168, 85, 247, 0.28);
-      color: #f3e8ff;
-      border-color: #c084fc;
+      background: rgba(168, 85, 247, 0.22);
+      color: #6b21a8;
+      border-color: #a855f7;
     }
     .grade-highlight-box {
-      background: rgba(16, 185, 129, 0.1);
+      background: rgba(16, 185, 129, 0.08);
       border: 1px solid rgba(16, 185, 129, 0.25);
       border-radius: var(--radius-sm, 6px);
       padding: 10px 14px;
@@ -182,12 +185,12 @@
     .grade-score-val {
       font-size: 1.25rem;
       font-weight: 800;
-      color: #10b981;
+      color: #059669;
       font-family: var(--font-mono);
     }
     .feedback-quote {
       font-size: 0.8rem;
-      color: #cbd5e1;
+      color: var(--color-text-secondary, #64748b);
       font-style: italic;
       margin-top: 4px;
       line-height: 1.4;
@@ -196,12 +199,12 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      background: rgba(15, 23, 42, 0.6);
-      border: 1px solid #334155;
+      background: var(--color-bg-surface-secondary, #f1f5fb);
+      border: 1px solid var(--color-border, #dce5f0);
       padding: 8px 12px;
       border-radius: 6px;
       font-size: 0.78rem;
-      color: #94a3b8;
+      color: var(--color-text-secondary, #64748b);
       overflow: hidden;
     }
     .file-attachment-info span {
@@ -213,8 +216,9 @@
     .laporan-modal-backdrop {
       position: fixed;
       inset: 0;
-      background: rgba(3, 7, 18, 0.75);
+      background: rgba(15, 23, 42, 0.45);
       backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
       z-index: 2000;
       display: none;
       align-items: center;
@@ -225,12 +229,12 @@
       display: flex;
     }
     .laporan-modal-box {
-      background: var(--color-bg-surface, #0f172a);
-      border: 1px solid var(--color-border, #334155);
+      background: var(--color-bg-surface, #ffffff);
+      border: 1px solid var(--color-border, #dce5f0);
       border-radius: var(--radius-lg, 14px);
       width: 100%;
       max-width: 520px;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+      box-shadow: 0 20px 40px rgba(15, 23, 42, 0.15);
       padding: 24px;
       animation: modalScale 0.2s ease-out;
     }
@@ -635,8 +639,8 @@
   <!-- UPLOAD MODAL DIALOG -->
   <div class="laporan-modal-backdrop" id="uploadModalBackdrop" onclick="closeUploadModalOnBackdrop(event)">
     <div class="laporan-modal-box">
-      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 12px; margin-bottom: 16px;">
-        <h3 style="color: #f8fafc; font-size: 1.05rem; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 8px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--color-border, #dce5f0); padding-bottom: 12px; margin-bottom: 16px;">
+        <h3 style="color: var(--color-text-primary, #0f172a); font-size: 1.05rem; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 8px;">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
           <span>Upload Laporan Praktikum</span>
         </h3>
@@ -649,25 +653,25 @@
         <input type="hidden" name="reportable_id" id="modalTargetId">
 
         <div style="margin-bottom: 14px;">
-          <label style="display: block; font-size: 0.78rem; font-weight: 600; color: #94a3b8; margin-bottom: 6px;">Target Praktikum:</label>
-          <div id="modalTargetTitle" style="background: rgba(15, 23, 42, 0.8); border: 1px solid #334155; padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; font-weight: 600; color: #38bdf8;">-</div>
+          <label style="display: block; font-size: 0.78rem; font-weight: 600; color: var(--color-text-secondary, #64748b); margin-bottom: 6px;">Target Praktikum:</label>
+          <div id="modalTargetTitle" style="background: var(--color-bg-surface-soft, #eaf2ff); border: 1px solid rgba(37, 99, 235, 0.25); padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; font-weight: 600; color: var(--color-primary, #2563eb);">-</div>
         </div>
 
         <div style="margin-bottom: 14px;">
-          <label for="laporanFile" style="display: block; font-size: 0.78rem; font-weight: 600; color: #94a3b8; margin-bottom: 6px;">Pilih File Laporan (Maks. 10 MB):</label>
-          <input type="file" name="file" id="laporanFile" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png,.zip,.rar" required style="display: block; width: 100%; background: #1e293b; border: 1px dashed #475569; padding: 12px; border-radius: 6px; color: #f8fafc; font-size: 0.82rem; cursor: pointer;">
-          <small style="display: block; color: #94a3b8; font-size: 0.72rem; margin-top: 5px; line-height: 1.4;">
+          <label for="laporanFile" style="display: block; font-size: 0.78rem; font-weight: 600; color: var(--color-text-secondary, #64748b); margin-bottom: 6px;">Pilih File Laporan (Maks. 10 MB):</label>
+          <input type="file" name="file" id="laporanFile" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png,.zip,.rar" required style="display: block; width: 100%; background: var(--color-bg-surface-secondary, #f8fafc); border: 1px dashed var(--color-border, #cbd5e1); padding: 12px; border-radius: 6px; color: var(--color-text-primary, #0f172a); font-size: 0.82rem; cursor: pointer;">
+          <small style="display: block; color: var(--color-text-secondary, #64748b); font-size: 0.72rem; margin-top: 5px; line-height: 1.4;">
             Format yang didukung: <strong>PDF, Word (.doc, .docx), PowerPoint (.ppt, .pptx), Excel (.xls, .xlsx), Gambar (JPG, PNG), Arsip (ZIP, RAR)</strong>. Ukuran maksimal <strong>10 MB</strong>.
           </small>
         </div>
 
         <div style="margin-bottom: 20px;">
-          <label for="laporanNote" style="display: block; font-size: 0.78rem; font-weight: 600; color: #94a3b8; margin-bottom: 6px;">Catatan Tambahan untuk Guru/Dosen (Opsional):</label>
-          <textarea name="note" id="laporanNote" rows="3" placeholder="Contoh: Laporan praktikum simulasi telah selesai diuji pada rangkaian seri dan paralel..." style="width: 100%; background: #1e293b; border: 1px solid #334155; border-radius: 6px; padding: 10px; color: #f8fafc; font-size: 0.82rem; resize: vertical;"></textarea>
+          <label for="laporanNote" style="display: block; font-size: 0.78rem; font-weight: 600; color: var(--color-text-secondary, #64748b); margin-bottom: 6px;">Catatan Tambahan untuk Guru/Dosen (Opsional):</label>
+          <textarea name="note" id="laporanNote" rows="3" placeholder="Contoh: Laporan praktikum simulasi telah selesai diuji pada rangkaian seri dan paralel..." style="width: 100%; background: var(--color-bg-surface-secondary, #f8fafc); border: 1px solid var(--color-border, #cbd5e1); border-radius: 6px; padding: 10px; color: var(--color-text-primary, #0f172a); font-size: 0.82rem; resize: vertical;"></textarea>
         </div>
 
         <div style="display: flex; gap: 10px; justify-content: flex-end;">
-          <button type="button" onclick="closeUploadModal()" style="background: transparent; border: 1px solid #475569; color: #cbd5e1; padding: 8px 16px; border-radius: 6px; font-size: 0.82rem; cursor: pointer;">Batal</button>
+          <button type="button" onclick="closeUploadModal()" style="background: transparent; border: 1px solid var(--color-border, #cbd5e1); color: var(--color-text-secondary, #64748b); padding: 8px 16px; border-radius: 6px; font-size: 0.82rem; cursor: pointer;">Batal</button>
           <button type="submit" class="btn-cta-sim" style="font-size: 0.82rem; padding: 8px 20px; display: inline-flex; align-items: center; gap: 6px;">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
             <span>Kirim Laporan</span>

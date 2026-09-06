@@ -80,15 +80,15 @@
 
       <!-- Sidebar Footer (Clickable Admin Profile Area) -->
       <div class="admin-sidebar-footer">
-        <a href="{{ route('profile.edit') }}" onclick="toggleAdminSidebar(false)" style="display: flex; align-items: center; gap: 10px; text-decoration: none; padding: 8px 10px; border-radius: 8px; background: rgba(15, 23, 42, 0.5); border: 1px solid #334155; transition: all 0.15s;" onmouseover="this.style.background='#1e293b'; this.style.borderColor='#0284c7'" onmouseout="this.style.background='rgba(15, 23, 42, 0.5)'; this.style.borderColor='#334155'" title="Buka Pengaturan Profil Admin">
-          <div class="user-avatar-circle" style="width: 34px; height: 34px; font-size: 0.85rem; flex-shrink: 0; background: linear-gradient(135deg, #0284c7, #38bdf8); color: #ffffff; font-weight: 700; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+        <a href="{{ route('profile.edit') }}" onclick="toggleAdminSidebar(false)" class="admin-sidebar-profile-card" title="Buka Pengaturan Profil Admin">
+          <div class="user-avatar-circle admin-avatar-circle">
             {{ strtoupper(substr(Auth::user()->name ?? 'A', 0, 1)) }}
           </div>
-          <div style="min-width: 0; flex: 1;">
-            <div style="font-size: 0.84rem; font-weight: 700; color: #f8fafc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ Auth::user()->name }}</div>
-            <div style="font-size: 0.72rem; color: #94a3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ Auth::user()->email }}</div>
+          <div class="admin-profile-info">
+            <div class="admin-profile-name">{{ Auth::user()->name }}</div>
+            <div class="admin-profile-email">{{ Auth::user()->email }}</div>
           </div>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          <svg class="admin-profile-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
         </a>
       </div>
     </aside>

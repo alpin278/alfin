@@ -47,7 +47,7 @@
           <div class="case-meta-group">
             <span class="case-number">KASUS {{ sprintf('%02d', $index + 1) }}</span>
             @if($case->creator)
-              <span class="case-difficulty diff-easy" style="background: rgba(56, 189, 248, 0.12); color: #38bdf8; border-color: rgba(56, 189, 248, 0.3);">
+              <span class="case-difficulty" style="background: var(--color-bg-surface-soft, #eaf2ff); color: var(--color-primary, #2563eb); border: 1px solid #bfdbfe;">
                 {{ $case->creator->name }}
               </span>
             @else
@@ -72,8 +72,8 @@
         </a>
       </div>
       @empty
-      <div style="grid-column: 1 / -1; text-align: center; padding: 48px 24px; background: rgba(15, 23, 42, 0.6); border: 1px dashed var(--color-border); border-radius: var(--radius-lg);">
-        <p style="color: var(--color-text-muted); font-size: 1rem; margin-bottom: 12px;">Belum ada studi kasus yang tersedia saat ini.</p>
+      <div style="grid-column: 1 / -1; text-align: center; padding: 48px 24px; background: #ffffff; border: 1px dashed var(--color-border, #dce5f0); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.04));">
+        <p style="color: var(--color-text-secondary, #64748b); font-size: 1rem; margin-bottom: 16px;">Belum ada studi kasus yang tersedia saat ini.</p>
         @if(Auth::check() && Auth::user()->role === 'admin')
           <a href="{{ route('simulasi', ['from' => 'studi-kasus']) }}" class="btn-start-case" style="display: inline-flex; width: auto; padding: 10px 24px;">
             <span>Buka Simulator & Buat Kasus Baru</span>
